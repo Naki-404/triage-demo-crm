@@ -1,3 +1,28 @@
+# Python
 .venv/
 __pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Env / secrets
 .env
+.local-data/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/playwright-report/
+frontend/test-results/
+
+# Logs / run journals
+*.log
+simulator/runs/
+logs/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
