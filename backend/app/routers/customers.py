@@ -1,13 +1,17 @@
+from html import escape
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
+from .. import vulns
 from ..auth import require_roles
 from ..db import get_db
 from ..iin import InvalidIINError
 from ..models import Client, User, UserRole
 from ..schemas import ClientCreate, ClientListOut, ClientOut, ClientUpdate
 from ..services import customers
-from ..services.customers import ExportError
+from ..services.customers import ExportError, PoolExhaustedError
 from ..services.deps import DependencyError, check_tax_status
 
 router = APIRouter(prefix="/api/customers", tags=["customers"])
@@ -27,11 +31,14 @@ def create_customer(
             iin=payload.iin,
             phone=payload.phone,
             email=str(payload.email) if payload.email else None,
+            birth_date=payload.birth_date,
         )
     except InvalidIINError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except PoolExhaustedError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     return ClientOut.model_validate(client)
 
 
@@ -43,7 +50,10 @@ def list_customers(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.admin, UserRole.manager, UserRole.viewer)),
 ):
-    items, total = customers.list_clients(db, page=page, page_size=page_size, q=q)
+    try:
+        items, total = customers.list_clients(db, page=page, page_size=page_size, q=q)
+    except PoolExhaustedError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     return ClientListOut(
         items=[ClientOut.model_validate(c) for c in items],
         total=total,
@@ -64,6 +74,8 @@ def search_customers(
             found = customers.search_by_name(db, name)
         except RuntimeError as exc:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+        except PoolExhaustedError as exc:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
         return [ClientOut.model_validate(c) for c in found]
     if iin:
         client = customers.search_by_iin(db, iin)
@@ -80,14 +92,19 @@ def export_customers(
     items, _ = customers.list_clients(db, page=1, page_size=10_000)
     try:
         if fmt == "xlsx":
-            data = customers.export_xlsx(items)
+            data = customers.export_xlsx(db, items)
             media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             filename = "clients.xlsx"
         else:
-            data = customers.export_csv(items)
+            data = customers.export_csv(db, items)
             media = "text/csv"
             filename = "clients.csv"
     except ExportError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+    except TypeError as exc:
+        # FAULT_EXPORT_NO_CONTRACT KeyError path surfaces as AttributeError/TypeError
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+    except AttributeError as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     return Response(
         content=data,
@@ -96,14 +113,29 @@ def export_customers(
     )
 
 
+@router.get("/export/file")
+def download_export_file(
+    name: str = Query(..., min_length=1),
+    _: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+):
+    try:
+        path = customers.safe_export_path(name)
+    except ExportError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if not path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    # Path traversal vuln may resolve outside EXPORT_DIR — intentional when flag on.
+    return Response(content=path.read_bytes(), media_type="application/octet-stream")
+
+
 @router.get("/{client_id}", response_model=ClientOut)
 def get_customer(
     client_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.manager, UserRole.viewer)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.manager, UserRole.viewer)),
 ):
     try:
-        client = customers.get_client(db, client_id)
+        client = customers.get_client(db, client_id, viewer=user)
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="record error") from exc
     if client is None:

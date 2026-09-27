@@ -67,8 +67,41 @@ def sql_injection(ctx: ScenarioContext, request_id: str | None = None) -> object
     )
 
 
+def vuln_sqli_search(ctx: ScenarioContext, request_id: str | None = None) -> object:
+    rid = request_id or uuid.uuid4().hex
+    ctx.client.patch_stand(crm_mode="vuln", VULN_SQLI_SEARCH=True)
+    ctx.client.login()
+    payload = "x' OR '1'='1' --"
+    res = ctx.client.get("/api/customers/search", request_id=rid, params={"name": payload})
+    return emit(ctx, request_id=rid, scenario="vuln_sqli_search", label="security", http_status=res.status_code, detail=payload)
+
+
+def vuln_mass_assignment(ctx: ScenarioContext, request_id: str | None = None) -> object:
+    rid = request_id or uuid.uuid4().hex
+    ctx.client.patch_stand(crm_mode="vuln", VULN_MASS_ASSIGNMENT=True)
+    ctx.client.login(username="manager", password="Manager-2026!")
+    res = ctx.client.patch("/api/auth/me", request_id=rid, json={"role": "admin"})
+    return emit(ctx, request_id=rid, scenario="vuln_mass_assignment", label="security", http_status=res.status_code)
+
+
+def vuln_xss_note(ctx: ScenarioContext, request_id: str | None = None) -> object:
+    rid = request_id or uuid.uuid4().hex
+    ctx.client.patch_stand(crm_mode="vuln", VULN_STORED_XSS_NOTES=True)
+    ctx.client.login()
+    customers = ctx.client.get("/api/customers").json()["items"]
+    res = ctx.client.post(
+        f"/api/customers/{customers[0]['id']}/notes",
+        request_id=rid,
+        json={"body": "<script>alert(1)</script>"},
+    )
+    return emit(ctx, request_id=rid, scenario="vuln_xss_note", label="security", http_status=res.status_code)
+
+
 SCENARIOS = {
     "brute_force": brute_force,
     "iin_enumeration": iin_enumeration,
     "sql_injection": sql_injection,
+    "vuln_sqli_search": vuln_sqli_search,
+    "vuln_mass_assignment": vuln_mass_assignment,
+    "vuln_xss_note": vuln_xss_note,
 }

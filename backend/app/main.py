@@ -8,7 +8,7 @@ from sentry_sdk.integrations.starlette import StarletteIntegration
 
 from .config import settings
 from .logging_ecs import RequestContextMiddleware
-from .routers import auth, customers, notes, stand
+from .routers import auth, commerce, customers, notes, stand
 from .schemas import HealthOut
 
 logger = logging.getLogger("crm")
@@ -51,16 +51,26 @@ def create_app() -> FastAPI:
 
     @app.get("/health", response_model=HealthOut)
     def health():
-        return HealthOut(status="ok", version=settings.APP_VERSION, crm_mode=settings.CRM_MODE)
+        return HealthOut(
+            status="ok",
+            version=settings.APP_VERSION,
+            crm_mode=settings.CRM_MODE,
+            company=settings.COMPANY_NAME,
+        )
 
     @app.get("/api/stand/public")
     def stand_public():
         """Minimal mode signal for the frontend (no auth)."""
-        return {"crm_mode": settings.CRM_MODE, "stand_ui": settings.is_experiment}
+        return {
+            "crm_mode": settings.CRM_MODE,
+            "stand_ui": settings.is_experiment or settings.is_vuln,
+            "company": settings.COMPANY_NAME,
+        }
 
     app.include_router(auth.router)
     app.include_router(customers.router)
     app.include_router(notes.router)
+    app.include_router(commerce.router)
     app.include_router(stand.router)
     return app
 

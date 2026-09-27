@@ -49,7 +49,7 @@ export default function App() {
         <div>
           <p className="brand">Qazaq CRM</p>
           <p className="muted" style={{ margin: 0 }}>
-            {user.username} · {user.role}
+            Bilim Academy · {user.username} · {user.role}
           </p>
         </div>
         <nav className="nav">

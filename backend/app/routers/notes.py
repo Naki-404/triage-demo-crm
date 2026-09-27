@@ -1,6 +1,9 @@
+from html import escape
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from .. import vulns
 from ..auth import require_roles
 from ..db import get_db
 from ..models import Client, ClientNote, User, UserRole
@@ -8,6 +11,20 @@ from ..schemas import NoteCreate, NoteOut
 from ..services.deps import DependencyError, post_note_remote
 
 router = APIRouter(tags=["notes"])
+
+
+def _note_out(note: ClientNote) -> NoteOut:
+    body = note.body
+    # Clean: escape HTML when returning. VULN_STORED_XSS_NOTES returns raw.
+    if not vulns.stored_xss_notes():
+        body = escape(body)
+    return NoteOut(
+        id=note.id,
+        client_id=note.client_id,
+        author_id=note.author_id,
+        body=body,
+        created_at=note.created_at,
+    )
 
 
 @router.get("/api/customers/{client_id}/notes", response_model=list[NoteOut])
@@ -19,7 +36,7 @@ def list_notes(
     if db.get(Client, client_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     notes = db.query(ClientNote).filter(ClientNote.client_id == client_id).order_by(ClientNote.id.desc()).all()
-    return [NoteOut.model_validate(n) for n in notes]
+    return [_note_out(n) for n in notes]
 
 
 @router.post("/api/customers/{client_id}/notes", response_model=NoteOut, status_code=status.HTTP_201_CREATED)
@@ -39,4 +56,4 @@ def create_note(
     db.add(note)
     db.commit()
     db.refresh(note)
-    return NoteOut.model_validate(note)
+    return _note_out(note)

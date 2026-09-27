@@ -45,7 +45,35 @@ def wrong_password(ctx: ScenarioContext, request_id: str | None = None) -> objec
     )
 
 
+def duplicate_enrollment(ctx: ScenarioContext, request_id: str | None = None) -> object:
+    rid = request_id or uuid.uuid4().hex
+    ctx.client.patch_stand(crm_mode="clean")
+    ctx.client.login()
+    customers = ctx.client.get("/api/customers").json()["items"]
+    courses = ctx.client.get("/api/courses").json()
+    payload = {"client_id": customers[0]["id"], "course_id": courses[0]["id"], "discount_pct": 0}
+    ctx.client.post("/api/enrollments", json=payload)
+    res = ctx.client.post("/api/enrollments", request_id=rid, json=payload)
+    return emit(ctx, request_id=rid, scenario="duplicate_enrollment", label="expected", http_status=res.status_code)
+
+
+def discount_limit_denied(ctx: ScenarioContext, request_id: str | None = None) -> object:
+    rid = request_id or uuid.uuid4().hex
+    ctx.client.patch_stand(crm_mode="clean")
+    ctx.client.login(username="manager", password="Manager-2026!")
+    customers = ctx.client.get("/api/customers").json()["items"]
+    courses = ctx.client.get("/api/courses").json()
+    res = ctx.client.post(
+        "/api/enrollments",
+        request_id=rid,
+        json={"client_id": customers[0]["id"], "course_id": courses[0]["id"], "discount_pct": 50},
+    )
+    return emit(ctx, request_id=rid, scenario="discount_limit_denied", label="expected", http_status=res.status_code)
+
+
 SCENARIOS = {
     "wrong_check_digit": wrong_check_digit,
     "wrong_password": wrong_password,
+    "duplicate_enrollment": duplicate_enrollment,
+    "discount_limit_denied": discount_limit_denied,
 }

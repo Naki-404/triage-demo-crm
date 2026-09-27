@@ -115,8 +115,34 @@ def export_empty_field(ctx: ScenarioContext, request_id: str | None = None) -> o
     )
 
 
+def pool_exhausted(ctx: ScenarioContext, request_id: str | None = None) -> object:
+    rid = request_id or uuid.uuid4().hex
+    ctx.client.patch_stand(crm_mode="experiment", FAULT_POOL_EXHAUSTED=True)
+    ctx.client.login()
+    res = ctx.client.get("/api/customers", request_id=rid)
+    return emit(ctx, request_id=rid, scenario="pool_exhausted", label="data_infra", http_status=res.status_code)
+
+
+def payment_webhook_stale(ctx: ScenarioContext, request_id: str | None = None) -> object:
+    import json
+    import time
+
+    rid = request_id or uuid.uuid4().hex
+    ctx.client.patch_stand(crm_mode="experiment", FAULT_PAYMENT_WEBHOOK=True)
+    body = json.dumps({"contract_id": 1, "amount_kzt": "1000", "external_id": f"stale-{ctx.seed}"}).encode()
+    res = ctx.client.post(
+        "/api/payments/webhook",
+        request_id=rid,
+        content=body,
+        headers={"Content-Type": "application/json", "X-Signature": "x", "X-Timestamp": str(int(time.time()))},
+    )
+    return emit(ctx, request_id=rid, scenario="payment_webhook_stale", label="data_infra", http_status=res.status_code)
+
+
 SCENARIOS = {
     "tax_timeout": tax_timeout,
     "notes_down": notes_down,
     "corrupt_record": corrupt_record,
+    "pool_exhausted": pool_exhausted,
+    "payment_webhook_stale": payment_webhook_stale,
 }

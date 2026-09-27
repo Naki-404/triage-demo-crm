@@ -54,10 +54,13 @@ class CrmClient:
         hdrs = {"X-Request-ID": rid, **(headers or {})}
         return self._client.request(method, path, headers=hdrs, **kwargs)
 
-    def login(self, *, as_admin: bool = False) -> httpx.Response:
-        user = self.admin_username if as_admin else self.username
-        password = self.admin_password if as_admin else self.password
-        res = self.request("POST", "/api/auth/login", json={"username": user, "password": password})
+    def login(self, *, as_admin: bool = False, username: str | None = None, password: str | None = None) -> httpx.Response:
+        if username and password:
+            user, pwd = username, password
+        else:
+            user = self.admin_username if as_admin else self.username
+            pwd = self.admin_password if as_admin else self.password
+        res = self.request("POST", "/api/auth/login", json={"username": user, "password": pwd})
         self._authed = res.status_code == 200
         self._as_admin = as_admin and self._authed
         return res
@@ -78,3 +81,6 @@ class CrmClient:
 
     def post(self, path: str, **kwargs: Any) -> httpx.Response:
         return self.request("POST", path, **kwargs)
+
+    def patch(self, path: str, **kwargs: Any) -> httpx.Response:
+        return self.request("PATCH", path, **kwargs)

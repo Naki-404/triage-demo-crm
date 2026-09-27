@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, Client, Note } from "../api";
+import { api, Client, Contract, Enrollment, Note, Payment } from "../api";
 
 type Props = { lang: "ru" | "en"; canWrite?: boolean };
 
@@ -8,6 +8,9 @@ export function ClientCardPage({ lang, canWrite = false }: Props) {
   const { id } = useParams();
   const [client, setClient] = useState<Client | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [contracts, setContracts] = useState<Contract[]>([]);
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [noteBody, setNoteBody] = useState("");
   const [tax, setTax] = useState<Record<string, unknown> | null>(null);
   const [taxError, setTaxError] = useState<string | null>(null);
@@ -27,6 +30,22 @@ export function ClientCardPage({ lang, canWrite = false }: Props) {
       .listNotes(num)
       .then(setNotes)
       .catch(() => setNotes([]));
+    api
+      .listContracts(num)
+      .then(async (list) => {
+        setContracts(list);
+        if (list[0]) {
+          const pays = await api.listPayments(list[0].id).catch(() => []);
+          setPayments(pays);
+        } else {
+          setPayments([]);
+        }
+      })
+      .catch(() => setContracts([]));
+    api
+      .listEnrollments(num)
+      .then(setEnrollments)
+      .catch(() => setEnrollments([]));
   }, [num]);
 
   async function onAddNote(e: FormEvent) {
@@ -74,16 +93,68 @@ export function ClientCardPage({ lang, canWrite = false }: Props) {
           <span className="muted">ИИН</span> {client.iin}
         </p>
         <p>
+          <span className="muted">{lang === "ru" ? "Дата рождения" : "Birth date"}</span>{" "}
+          {client.birth_date || "—"}
+        </p>
+        <p>
           <span className="muted">{lang === "ru" ? "Телефон" : "Phone"}</span> {client.phone || "—"}
         </p>
         <p>
           <span className="muted">Email</span> {client.email || "—"}
         </p>
+        <p>
+          <a className="btn" href={api.exportUrl("csv")}>
+            {lang === "ru" ? "Экспорт CSV" : "Export CSV"}
+          </a>
+        </p>
+      </div>
+
+      <div className="panel" style={{ marginBottom: "1.25rem" }}>
+        <p style={{ marginTop: 0 }}>{lang === "ru" ? "Записи на курсы" : "Enrollments"}</p>
+        {enrollments.length === 0 ? (
+          <p className="muted">{lang === "ru" ? "Пока нет" : "None"}</p>
+        ) : (
+          <ul style={{ paddingLeft: "1.1rem", margin: 0 }}>
+            {enrollments.map((e) => (
+              <li key={e.id}>
+                course #{e.course_id} · {e.price_kzt} ₸ · −{e.discount_pct}%
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="panel" style={{ marginBottom: "1.25rem" }}>
+        <p style={{ marginTop: 0 }}>{lang === "ru" ? "Договоры" : "Contracts"}</p>
+        {contracts.length === 0 ? (
+          <p className="muted">{lang === "ru" ? "Договора нет" : "No contracts"}</p>
+        ) : (
+          <ul style={{ paddingLeft: "1.1rem", margin: 0 }}>
+            {contracts.map((c) => (
+              <li key={c.id}>
+                {c.number} · {c.status} · {c.total_kzt} ₸
+              </li>
+            ))}
+          </ul>
+        )}
+        {payments.length > 0 && (
+          <>
+            <p style={{ marginTop: "1rem" }}>{lang === "ru" ? "Оплаты" : "Payments"}</p>
+            <ul style={{ paddingLeft: "1.1rem", margin: 0 }}>
+              {payments.map((p) => (
+                <li key={p.id}>
+                  {p.amount_kzt} ₸ · {p.status}
+                  {p.card_last4 ? ` · ****${p.card_last4}` : ""}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
       </div>
 
       {canWrite && (
         <div className="panel" style={{ marginBottom: "1.25rem" }}>
-          <p style={{ marginTop: 0 }}>{lang === "ru" ? "Налоговый статус" : "Tax status"}</p>
+          <p style={{ marginTop: 0 }}>{lang === "ru" ? "Налоговый статус (ЭСФ)" : "Tax status"}</p>
           <button className="btn" type="button" onClick={onCheckTax} disabled={pending}>
             {lang === "ru" ? "Проверить" : "Check"}
           </button>
