@@ -5,6 +5,21 @@ It must not contain product feature logic — only flags read by service branche
 """
 from .config import settings
 
+FAULT_KEYS = (
+    "FAULT_IIN_SECOND_WEIGHTS",
+    "FAULT_NAME_SEARCH_RAW_SQL",
+    "FAULT_EXPORT_EMPTY_FIELD",
+    "FAULT_CORRUPT_RECORD",
+    "FAULT_TAX_TIMEOUT",
+    "FAULT_NOTES_DOWN",
+    "FAULT_POOL_EXHAUSTED",
+    "FAULT_PAYMENT_WEBHOOK",
+    "FAULT_DISCOUNT_STACK",
+    "FAULT_DUPLICATE_ENROLLMENT",
+    "FAULT_INSTALLMENT_ROUNDING",
+    "FAULT_EXPORT_NO_CONTRACT",
+)
+
 
 def active(name: str) -> bool:
     if not settings.is_experiment:
@@ -76,21 +91,4 @@ def snapshot() -> dict[str, bool | str]:
         "FAULT_DUPLICATE_ENROLLMENT": duplicate_enrollment_allowed(),
         "FAULT_INSTALLMENT_ROUNDING": installment_rounding_bug(),
         "FAULT_EXPORT_NO_CONTRACT": export_requires_no_contract_bug(),
-        **{k: bool(getattr(settings, k, False)) and settings.is_vuln for k in _VULN_KEYS},
     }
-
-
-_VULN_KEYS = (
-    "VULN_SQLI_SEARCH",
-    "VULN_IDOR_CUSTOMER",
-    "VULN_MASS_ASSIGNMENT",
-    "VULN_STORED_XSS_NOTES",
-    "VULN_PATH_TRAVERSAL_EXPORT",
-    "VULN_SSRF_WEBHOOK",
-    "VULN_XXE_1C_IMPORT",
-    "VULN_NO_RATE_LIMIT_LOGIN",
-    "VULN_OPEN_REDIRECT",
-    "VULN_CSV_INJECTION",
-    "VULN_PRICE_TAMPERING",
-    "VULN_PAYMENT_SIGNATURE",
-)

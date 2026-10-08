@@ -2,8 +2,9 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, create_model
 
+from . import faults
 from .models import ContractStatus, InstallmentStatus, PaymentStatus, UserRole
 from .vulns import all_keys as vuln_keys
 
@@ -186,52 +187,13 @@ class PaymentWebhookIn(BaseModel):
     card_last4: str | None = Field(default=None, max_length=4)
 
 
-_FAULT_FIELDS = {
-    "FAULT_IIN_SECOND_WEIGHTS": bool | None,
-    "FAULT_NAME_SEARCH_RAW_SQL": bool | None,
-    "FAULT_EXPORT_EMPTY_FIELD": bool | None,
-    "FAULT_CORRUPT_RECORD": bool | None,
-    "FAULT_TAX_TIMEOUT": bool | None,
-    "FAULT_NOTES_DOWN": bool | None,
-    "FAULT_POOL_EXHAUSTED": bool | None,
-    "FAULT_PAYMENT_WEBHOOK": bool | None,
-    "FAULT_DISCOUNT_STACK": bool | None,
-    "FAULT_DUPLICATE_ENROLLMENT": bool | None,
-    "FAULT_INSTALLMENT_ROUNDING": bool | None,
-    "FAULT_EXPORT_NO_CONTRACT": bool | None,
-}
+_stand_fields: dict = {"crm_mode": (Literal["clean", "experiment", "vuln"] | None, None)}
+for _key in faults.FAULT_KEYS:
+    _stand_fields[_key] = (bool | None, None)
+for _key in vuln_keys():
+    _stand_fields[_key] = (bool | None, None)
 
-
-class StandPatch(BaseModel):
-    crm_mode: Literal["clean", "experiment", "vuln"] | None = None
-    FAULT_IIN_SECOND_WEIGHTS: bool | None = None
-    FAULT_NAME_SEARCH_RAW_SQL: bool | None = None
-    FAULT_EXPORT_EMPTY_FIELD: bool | None = None
-    FAULT_CORRUPT_RECORD: bool | None = None
-    FAULT_TAX_TIMEOUT: bool | None = None
-    FAULT_NOTES_DOWN: bool | None = None
-    FAULT_POOL_EXHAUSTED: bool | None = None
-    FAULT_PAYMENT_WEBHOOK: bool | None = None
-    FAULT_DISCOUNT_STACK: bool | None = None
-    FAULT_DUPLICATE_ENROLLMENT: bool | None = None
-    FAULT_INSTALLMENT_ROUNDING: bool | None = None
-    FAULT_EXPORT_NO_CONTRACT: bool | None = None
-    VULN_SQLI_SEARCH: bool | None = None
-    VULN_IDOR_CUSTOMER: bool | None = None
-    VULN_MASS_ASSIGNMENT: bool | None = None
-    VULN_STORED_XSS_NOTES: bool | None = None
-    VULN_PATH_TRAVERSAL_EXPORT: bool | None = None
-    VULN_SSRF_WEBHOOK: bool | None = None
-    VULN_XXE_1C_IMPORT: bool | None = None
-    VULN_NO_RATE_LIMIT_LOGIN: bool | None = None
-    VULN_OPEN_REDIRECT: bool | None = None
-    VULN_CSV_INJECTION: bool | None = None
-    VULN_PRICE_TAMPERING: bool | None = None
-    VULN_PAYMENT_SIGNATURE: bool | None = None
-
-
-# Ensure StandPatch lists every vuln key (keeps schema in sync with vulns.all_keys).
-assert set(vuln_keys()).issubset(set(StandPatch.model_fields))
+StandPatch = create_model("StandPatch", **_stand_fields)
 
 
 class HealthOut(BaseModel):

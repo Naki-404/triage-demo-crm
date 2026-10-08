@@ -106,6 +106,9 @@ def export_customers(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     except AttributeError as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+    path = customers.safe_export_path(filename)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
     return Response(
         content=data,
         media_type=media,
