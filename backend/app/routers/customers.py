@@ -1,10 +1,6 @@
-from html import escape
-from pathlib import Path
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
-from .. import vulns
 from ..auth import require_roles
 from ..db import get_db
 from ..iin import InvalidIINError
