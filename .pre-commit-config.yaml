@@ -1,0 +1,20 @@
+minimum_pre_commit_version: "3.0.0"
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.8
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^backend/.+\.py$|^simulator/.+\.py$
+      - id: ruff-format
+        files: ^backend/.+\.py$|^simulator/.+\.py$
+
+  - repo: local
+    hooks:
+      - id: reject-co-authored-by
+        name: Reject Co-Authored-By in commit messages
+        entry: python -c "import pathlib,sys; t=pathlib.Path(sys.argv[1]).read_text(encoding='utf-8',errors='replace'); raise SystemExit(1 if any(l.strip().lower().startswith('co-authored-by:') for l in t.splitlines()) else 0)"
+        language: system
+        stages: [commit-msg]
+        pass_filenames: true

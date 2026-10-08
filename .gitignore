@@ -1,3 +1,6 @@
+# Scratch / temp
+.tmp-*
+
 # Python
 .venv/
 __pycache__/
@@ -8,7 +11,16 @@ __pycache__/
 
 # Env / secrets
 .env
+.env.*
+!.env.example
 .local-data/
+
+# Local databases
+*.db
+*.sqlite3
+
+# TypeScript build info
+*.tsbuildinfo
 
 # Frontend
 frontend/node_modules/
@@ -20,6 +32,11 @@ frontend/test-results/
 *.log
 simulator/runs/
 logs/
+exports/
+
+# Coverage
+.coverage
+htmlcov/
 
 # IDE / OS
 .idea/

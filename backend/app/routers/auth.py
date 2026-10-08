@@ -43,7 +43,7 @@ def login(
     out = AuthOut(user=UserOut.model_validate(user))
     # VULN_OPEN_REDIRECT intentional — reflect next without allowlist.
     if next:
-        if vulns.open_redirect():
+        if vulns.open_redirect():  # noqa: SIM114 — keep vuln vs safe branches explicit for stand demos
             response.headers["X-Redirect-To"] = next
         elif next.startswith("/") and not next.startswith("//"):
             response.headers["X-Redirect-To"] = next

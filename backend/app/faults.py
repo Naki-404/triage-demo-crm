@@ -3,7 +3,7 @@
 This module is excluded from the CSIP code-graph index and from model context snippets.
 It must not contain product feature logic — only flags read by service branches.
 """
-from .stand_flags import FAULT_KEYS, fault_active, fault_snapshot
+from .stand_flags import fault_active, fault_snapshot
 
 active = fault_active
 snapshot = fault_snapshot
