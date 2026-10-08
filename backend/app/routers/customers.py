@@ -8,9 +8,10 @@ from .. import vulns
 from ..auth import require_roles
 from ..db import get_db
 from ..iin import InvalidIINError
-from ..models import Client, User, UserRole
+from ..models import User, UserRole
 from ..schemas import ClientCreate, ClientListOut, ClientOut, ClientUpdate
 from ..services import customers
+from ..services.access import ClientAccessError
 from ..services.customers import ExportError, PoolExhaustedError
 from ..services.deps import DependencyError, check_tax_status
 
@@ -151,18 +152,19 @@ def update_customer(
     client_id: int,
     payload: ClientUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ):
-    client = db.get(Client, client_id)
-    if client is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     data = payload.model_dump(exclude_unset=True)
     if "email" in data and data["email"] is not None:
         data["email"] = str(data["email"])
-    for key, value in data.items():
-        setattr(client, key, value)
-    db.commit()
-    db.refresh(client)
+    try:
+        client = customers.update_client(db, client_id, user, data)
+    except ClientAccessError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    if client is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return ClientOut.model_validate(client)
 
 
@@ -170,9 +172,9 @@ def update_customer(
 def customer_tax(
     client_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ):
-    client = db.get(Client, client_id)
+    client = customers.client_for_user(db, client_id, user)
     if client is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     try:

@@ -1,28 +1,22 @@
-from html import escape
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from .. import vulns
 from ..auth import require_roles
 from ..db import get_db
-from ..models import Client, ClientNote, User, UserRole
+from ..models import User, UserRole
 from ..schemas import NoteCreate, NoteOut
-from ..services.deps import DependencyError, post_note_remote
+from ..services import notes as notes_service
+from ..services.notes import NotesError
 
 router = APIRouter(tags=["notes"])
 
 
-def _note_out(note: ClientNote) -> NoteOut:
-    body = note.body
-    # Clean: escape HTML when returning. VULN_STORED_XSS_NOTES returns raw.
-    if not vulns.stored_xss_notes():
-        body = escape(body)
+def _note_out(note) -> NoteOut:
     return NoteOut(
         id=note.id,
         client_id=note.client_id,
         author_id=note.author_id,
-        body=body,
+        body=notes_service.note_body_for_response(note.body),
         created_at=note.created_at,
     )
 
@@ -31,12 +25,13 @@ def _note_out(note: ClientNote) -> NoteOut:
 def list_notes(
     client_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.manager, UserRole.viewer)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.manager, UserRole.viewer)),
 ):
-    if db.get(Client, client_id) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    notes = db.query(ClientNote).filter(ClientNote.client_id == client_id).order_by(ClientNote.id.desc()).all()
-    return [_note_out(n) for n in notes]
+    try:
+        rows = notes_service.list_notes(db, client_id, user)
+    except NotesError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    return [_note_out(n) for n in rows]
 
 
 @router.post("/api/customers/{client_id}/notes", response_model=NoteOut, status_code=status.HTTP_201_CREATED)
@@ -46,14 +41,8 @@ def create_note(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ):
-    if db.get(Client, client_id) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     try:
-        post_note_remote(client_id, payload.body)
-    except DependencyError as err:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(err)) from err
-    note = ClientNote(client_id=client_id, author_id=user.id, body=payload.body)
-    db.add(note)
-    db.commit()
-    db.refresh(note)
+        note = notes_service.create_note(db, client_id, user, payload.body)
+    except NotesError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     return _note_out(note)

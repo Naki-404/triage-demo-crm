@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session
 from .. import faults, vulns
 from ..config import settings
 from ..iin import validate_iin
-from ..models import Client, Contract, User
+from ..models import Client, Contract, User, UserRole
+from .access import ClientAccessError, assert_can_access
 
 
 class ExportError(RuntimeError):
@@ -89,14 +90,41 @@ def get_client(db: Session, client_id: int, viewer: User | None = None) -> Clien
     client = db.get(Client, client_id)
     if client is None:
         return None
-    # Clean path: managers only see own clients unless admin. VULN_IDOR skips check.
-    if viewer is not None and not vulns.idor_customer():
-        if viewer.role.value != "admin" and client.owner_id != viewer.id and viewer.role.value != "viewer":
-            # managers: own only; viewers: all (read); admin: all
-            if viewer.role.value == "manager" and client.owner_id != viewer.id:
-                return None
+    if viewer is not None:
+        try:
+            assert_can_access(viewer, client)
+        except ClientAccessError:
+            return None
     if client.meta_json:
         json.loads(client.meta_json)
+    return client
+
+
+def update_client(db: Session, client_id: int, user: User, data: dict) -> Client | None:
+    _check_pool()
+    client = db.get(Client, client_id)
+    if client is None:
+        return None
+    assert_can_access(user, client)
+    if user.role not in (UserRole.admin, UserRole.manager):
+        raise PermissionError("Forbidden")
+    for key, value in data.items():
+        setattr(client, key, value)
+    db.commit()
+    db.refresh(client)
+    return client
+
+
+def client_for_user(db: Session, client_id: int, user: User) -> Client | None:
+    """Load client or None when missing or access denied."""
+    _check_pool()
+    client = db.get(Client, client_id)
+    if client is None:
+        return None
+    try:
+        assert_can_access(user, client)
+    except ClientAccessError:
+        return None
     return client
 
 

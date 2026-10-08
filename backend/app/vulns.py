@@ -3,28 +3,14 @@
 # VULN_* intentional, experiment only — isolated from clean product paths.
 This module is excluded from the CSIP code-graph index (same policy as faults.py).
 """
-from .config import settings
+from .stand_flags import VULN_KEYS, vuln_active, vuln_snapshot
 
-_VULN_KEYS = (
-    "VULN_SQLI_SEARCH",
-    "VULN_IDOR_CUSTOMER",
-    "VULN_MASS_ASSIGNMENT",
-    "VULN_STORED_XSS_NOTES",
-    "VULN_PATH_TRAVERSAL_EXPORT",
-    "VULN_SSRF_WEBHOOK",
-    "VULN_XXE_1C_IMPORT",
-    "VULN_NO_RATE_LIMIT_LOGIN",
-    "VULN_OPEN_REDIRECT",
-    "VULN_CSV_INJECTION",
-    "VULN_PRICE_TAMPERING",
-    "VULN_PAYMENT_SIGNATURE",
-)
+active = vuln_active
+snapshot = vuln_snapshot
 
 
-def active(name: str) -> bool:
-    if not settings.is_vuln:
-        return False
-    return bool(getattr(settings, name, False))
+def all_keys() -> tuple[str, ...]:
+    return VULN_KEYS
 
 
 def sqli_search() -> bool:
@@ -73,11 +59,3 @@ def price_tampering() -> bool:
 
 def payment_signature_skip() -> bool:
     return active("VULN_PAYMENT_SIGNATURE")
-
-
-def snapshot() -> dict[str, bool | str]:
-    return {"crm_mode": settings.CRM_MODE, **{k: active(k) for k in _VULN_KEYS}}
-
-
-def all_keys() -> tuple[str, ...]:
-    return _VULN_KEYS

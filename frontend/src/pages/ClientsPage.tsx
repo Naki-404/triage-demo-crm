@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { api, Client } from "../api";
+import { ClientCreateForm } from "../components/clients/ClientCreateForm";
+import { ClientsTable } from "../components/clients/ClientsTable";
+import { ClientsToolbar } from "../components/clients/ClientsToolbar";
 
 type Props = { lang: "ru" | "en"; canWrite: boolean };
 
@@ -90,51 +92,22 @@ export function ClientsPage({ lang, canWrite }: Props) {
 
   return (
     <div>
-      <div className="toolbar">
-        <form className="row" onSubmit={onSearch}>
-          <label className="field" style={{ marginBottom: 0 }}>
-            <span>{lang === "ru" ? "Поиск" : "Search"}</span>
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="name / IIN" disabled={pending} />
-          </label>
-          <button className="btn" type="submit" disabled={pending || loading}>
-            {lang === "ru" ? "Найти" : "Find"}
-          </button>
-        </form>
-        <div className="row">
-          <a className="btn" href={api.exportUrl("csv")}>
-            CSV
-          </a>
-          <a className="btn" href={api.exportUrl("xlsx")}>
-            XLSX
-          </a>
-        </div>
-      </div>
+      <ClientsToolbar lang={lang} q={q} pending={pending} loading={loading} onQChange={setQ} onSearch={onSearch} />
 
       {canWrite && (
-        <form className="panel" onSubmit={onCreate} style={{ marginBottom: "1.25rem" }}>
-          <p style={{ marginTop: 0 }}>{lang === "ru" ? "Новый клиент" : "New client"}</p>
-          <div className="row">
-            <label className="field">
-              <span>{lang === "ru" ? "ФИО" : "Name"}</span>
-              <input value={name} onChange={(e) => setName(e.target.value)} required disabled={pending} />
-            </label>
-            <label className="field">
-              <span>ИИН</span>
-              <input value={iin} onChange={(e) => setIin(e.target.value)} required minLength={12} maxLength={12} disabled={pending} />
-            </label>
-            <label className="field">
-              <span>{lang === "ru" ? "Телефон" : "Phone"}</span>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} disabled={pending} />
-            </label>
-            <label className="field">
-              <span>Email</span>
-              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" disabled={pending} />
-            </label>
-            <button className="btn btn-primary" type="submit" disabled={pending}>
-              {pending ? (lang === "ru" ? "…" : "…") : lang === "ru" ? "Создать" : "Create"}
-            </button>
-          </div>
-        </form>
+        <ClientCreateForm
+          lang={lang}
+          pending={pending}
+          name={name}
+          iin={iin}
+          phone={phone}
+          email={email}
+          onNameChange={setName}
+          onIinChange={setIin}
+          onPhoneChange={setPhone}
+          onEmailChange={setEmail}
+          onSubmit={onCreate}
+        />
       )}
 
       {error && <p className="error">{error}</p>}
@@ -149,45 +122,16 @@ export function ClientsPage({ lang, canWrite }: Props) {
           </p>
         </div>
       ) : (
-        <>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>{lang === "ru" ? "Имя" : "Name"}</th>
-                <th>ИИН</th>
-                <th>{lang === "ru" ? "Телефон" : "Phone"}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((c) => (
-                <tr key={c.id}>
-                  <td>
-                    <Link to={`/clients/${c.id}`}>{c.id}</Link>
-                  </td>
-                  <td>{c.name}</td>
-                  <td>{c.iin}</td>
-                  <td>{c.phone || "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {total > PAGE_SIZE && (
-            <div className="row" style={{ justifyContent: "space-between", marginTop: "1rem" }}>
-              <span className="muted">
-                {lang === "ru" ? "Стр." : "Page"} {page} / {pageCount} · {total}
-              </span>
-              <div className="row" style={{ marginBottom: 0 }}>
-                <button className="btn" type="button" disabled={pending || page <= 1} onClick={() => goPage(page - 1)}>
-                  {lang === "ru" ? "Назад" : "Prev"}
-                </button>
-                <button className="btn" type="button" disabled={pending || page >= pageCount} onClick={() => goPage(page + 1)}>
-                  {lang === "ru" ? "Вперёд" : "Next"}
-                </button>
-              </div>
-            </div>
-          )}
-        </>
+        <ClientsTable
+          lang={lang}
+          items={items}
+          page={page}
+          pageCount={pageCount}
+          total={total}
+          pageSize={PAGE_SIZE}
+          pending={pending}
+          onPage={goPage}
+        />
       )}
     </div>
   );
