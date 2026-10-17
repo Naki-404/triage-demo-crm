@@ -3,6 +3,8 @@ import { api, Client } from "../api";
 import { ClientCreateForm } from "../components/clients/ClientCreateForm";
 import { ClientsTable } from "../components/clients/ClientsTable";
 import { ClientsToolbar } from "../components/clients/ClientsToolbar";
+import { Modal, PageHead } from "../components/ui";
+import { tr } from "../format";
 
 type Props = { lang: "ru" | "en"; canWrite: boolean };
 
@@ -20,6 +22,7 @@ export function ClientsPage({ lang, canWrite }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   async function load(query?: string, pageNum = page) {
     setLoading(true);
@@ -69,6 +72,7 @@ export function ClientsPage({ lang, canWrite }: Props) {
       setIin("");
       setPhone("");
       setEmail("");
+      setCreating(false);
       await load(q, 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
@@ -92,9 +96,21 @@ export function ClientsPage({ lang, canWrite }: Props) {
 
   return (
     <div>
+      <PageHead
+        title={tr(lang, "Клиенты", "Clients")}
+        subtitle={`${total} ${tr(lang, "в базе", "in the database")}`}
+        actions={
+          canWrite && (
+            <button className="btn btn-primary" type="button" onClick={() => setCreating(true)}>
+              + {tr(lang, "Новый клиент", "New client")}
+            </button>
+          )
+        }
+      />
       <ClientsToolbar lang={lang} q={q} pending={pending} loading={loading} onQChange={setQ} onSearch={onSearch} />
 
-      {canWrite && (
+      {canWrite && creating && (
+        <Modal title={tr(lang, "Новый клиент", "New client")} onClose={() => setCreating(false)}>
         <ClientCreateForm
           lang={lang}
           pending={pending}
@@ -108,6 +124,8 @@ export function ClientsPage({ lang, canWrite }: Props) {
           onEmailChange={setEmail}
           onSubmit={onCreate}
         />
+        {error && <p className="error">{error}</p>}
+        </Modal>
       )}
 
       {error && <p className="error">{error}</p>}
@@ -122,6 +140,7 @@ export function ClientsPage({ lang, canWrite }: Props) {
           </p>
         </div>
       ) : (
+        <div className="panel">
         <ClientsTable
           lang={lang}
           items={items}
@@ -132,6 +151,7 @@ export function ClientsPage({ lang, canWrite }: Props) {
           pending={pending}
           onPage={goPage}
         />
+        </div>
       )}
     </div>
   );

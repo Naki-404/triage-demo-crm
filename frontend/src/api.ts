@@ -3,14 +3,46 @@ import type {
   Client,
   ClientList,
   Contract,
+  ContractDetail,
+  ContractRow,
   Course,
+  Dashboard,
+  DueRow,
   Enrollment,
+  Installment,
   Note,
+  Package,
+  Paged,
   Payment,
+  PaymentRow,
   User,
 } from "./api/types";
 
-export type { Client, ClientList, Contract, Course, Enrollment, Note, Payment, User };
+export type {
+  Client,
+  ClientList,
+  Contract,
+  ContractDetail,
+  ContractRow,
+  Course,
+  Dashboard,
+  DueRow,
+  Enrollment,
+  Installment,
+  Note,
+  Package,
+  Paged,
+  Payment,
+  PaymentRow,
+  User,
+};
+
+function qs(params: Record<string, string | number | boolean | undefined | null>): string {
+  const parts = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== null && v !== "" && v !== false)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`);
+  return parts.length ? `?${parts.join("&")}` : "";
+}
 
 export const api = {
   login: (username: string, password: string) =>
@@ -44,4 +76,18 @@ export const api = {
   listEnrollments: (clientId: number) => request<Enrollment[]>(`/api/clients/${clientId}/enrollments`),
   enroll: (body: { client_id: number; course_id: number; discount_pct?: number }) =>
     request<Enrollment[]>("/api/enrollments", { method: "POST", body: JSON.stringify(body) }),
+  listPackages: () => request<Package[]>("/api/packages"),
+  createContract: (body: { client_id: number; number: string; enrollment_ids: number[]; discount_pct?: number }) =>
+    request<Contract>("/api/contracts", { method: "POST", body: JSON.stringify(body) }),
+  planInstallments: (contractId: number, months: 3 | 6 | 12) =>
+    request<Installment[]>(`/api/contracts/${contractId}/installments`, { method: "POST", body: JSON.stringify({ months }) }),
+  dashboard: () => request<Dashboard>("/api/dashboard"),
+  contracts: (opts: { status?: string; q?: string; overdue?: boolean; page?: number; page_size?: number }) =>
+    request<Paged<ContractRow>>(`/api/contracts${qs(opts)}`),
+  contract: (id: number) => request<ContractDetail>(`/api/contracts/${id}`),
+  signContract: (id: number) => request<ContractDetail>(`/api/contracts/${id}/sign`, { method: "POST" }),
+  takePayment: (id: number, amount_kzt: string, method: "cash" | "kaspi" | "card") =>
+    request<ContractDetail>(`/api/contracts/${id}/payments`, { method: "POST", body: JSON.stringify({ amount_kzt, method }) }),
+  payments: (opts: { status?: string; q?: string; page?: number; page_size?: number }) =>
+    request<Paged<PaymentRow> & { sum_kzt: string }>(`/api/payments${qs(opts)}`),
 };

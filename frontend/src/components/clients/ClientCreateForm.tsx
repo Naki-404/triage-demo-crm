@@ -18,9 +18,8 @@ export function ClientCreateForm(props: Props) {
   const { lang, pending, name, iin, phone, email, onNameChange, onIinChange, onPhoneChange, onEmailChange, onSubmit } =
     props;
   return (
-    <form className="panel" onSubmit={onSubmit} style={{ marginBottom: "1.25rem" }}>
-      <p style={{ marginTop: 0 }}>{lang === "ru" ? "Новый клиент" : "New client"}</p>
-      <div className="row">
+    <form onSubmit={onSubmit}>
+      <div>
         <label className="field">
           <span>{lang === "ru" ? "ФИО" : "Name"}</span>
           <input value={name} onChange={(e) => onNameChange(e.target.value)} required disabled={pending} />

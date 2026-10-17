@@ -10,7 +10,7 @@ from sentry_sdk.integrations.starlette import StarletteIntegration
 from .config import production_problems, settings
 from .errors import install_error_handlers
 from .logging_ecs import RequestContextMiddleware
-from .routers import auth, commerce, customers, notes, stand
+from .routers import auth, commerce, customers, notes, reports, stand
 from .schemas import HealthOut
 
 logger = logging.getLogger("crm")
@@ -75,6 +75,7 @@ def create_app() -> FastAPI:
     app.include_router(customers.router)
     app.include_router(notes.router)
     app.include_router(commerce.router)
+    app.include_router(reports.router)
     app.include_router(stand.router)
     _mount_frontend(app)
     return app

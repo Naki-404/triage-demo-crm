@@ -42,7 +42,8 @@ COURSES = [
 ]
 
 
-DEV_PASSWORDS = {"admin": "Admin-2026!", "manager": "Manager-2026!", "viewer": "Viewer-2026!"}
+DEV_PASSWORDS = {"admin": "Admin-2026!", "manager": "Manager-2026!", "viewer": "Viewer-2026!",
+                 "aliya": "Aliya-2026!", "daniyar": "Daniyar-2026!"}
 
 
 def _seed_password(username: str) -> str:
@@ -149,5 +150,17 @@ def seed(force: bool = False) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--demo", action="store_true", help="also add the demo year (more managers, ~320 clients, contracts, payments)")
+    parser.add_argument("--demo-reset", action="store_true", help="remove the demo year first, then add it again")
     args = parser.parse_args()
     seed(force=args.force)
+    if args.demo or args.demo_reset:
+        from app.demo_data import populate, reset
+
+        db = SessionLocal()
+        try:
+            if args.demo_reset:
+                print("demo data removed:", reset(db), "clients")
+            print("demo data:", populate(db, _seed_password))
+        finally:
+            db.close()
