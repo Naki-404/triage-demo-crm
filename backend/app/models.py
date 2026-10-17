@@ -64,6 +64,8 @@ class User(Base):
     locked_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Max discount percent this manager may apply (admin = 100).
     max_discount_pct: Mapped[int] = mapped_column(Integer, default=10)
+    # Outbound notification target of the manager; validated against private networks in clean mode.
+    webhook_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     sessions: Mapped[list["SessionToken"]] = relationship(back_populates="user", cascade="all, delete-orphan")
@@ -93,7 +95,7 @@ class Client(Base):
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    # Optional field used by stand switch for corrupt serialization paths
+    # Free-form JSON attributes of the client card
     meta_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
@@ -195,6 +197,7 @@ class Enrollment(Base):
 
 class Installment(Base):
     __tablename__ = "installments"
+    __table_args__ = (UniqueConstraint("contract_id", "seq", name="uq_installment_contract_seq"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     contract_id: Mapped[int] = mapped_column(ForeignKey("contracts.id"), index=True)
@@ -217,7 +220,7 @@ class Payment(Base):
     # Token from payment gateway + last 4 digits only (never full PAN).
     card_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     card_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
-    external_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    external_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True, unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

@@ -6,7 +6,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from .. import faults, vulns
-from ..models import Client, Course, Enrollment, Package, User
+from ..models import Client, Contract, Course, Enrollment, Package, User
 from .access import assert_can_access
 from .commerce_pricing import CommerceError, apply_discount, check_discount_allowed
 
@@ -32,6 +32,10 @@ def enroll(
     assert_can_access(user, client)
 
     check_discount_allowed(user, discount_pct)
+    if contract_id is not None and discount_pct and not faults.discount_stacks():
+        contract = db.get(Contract, contract_id)
+        if contract is not None and contract.discount_pct:
+            raise CommerceError("The contract already carries a discount; the enrollment cannot add another", 409)
     created: list[Enrollment] = []
 
     def _one(cid: int, base: Decimal, pkg: int | None) -> Enrollment:

@@ -6,6 +6,8 @@ import hmac
 import time
 from decimal import Decimal
 
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import faults, vulns
@@ -48,19 +50,31 @@ def record_payment(
     contract = db.get(Contract, contract_id)
     if contract is None:
         raise CommerceError("Contract not found", 404)
+    if amount_kzt is None or amount_kzt <= 0:
+        raise CommerceError("Payment amount must be positive", 400)
+    if contract.total_kzt is not None and amount_kzt > contract.total_kzt:
+        raise CommerceError("Payment exceeds the contract total", 400)
     existing = db.query(Payment).filter(Payment.external_id == external_id).first()
     if existing:
         return existing
+    paid = db.query(func.coalesce(func.sum(Payment.amount_kzt), 0)).filter(Payment.contract_id == contract_id).scalar()
+    if contract.total_kzt is not None and Decimal(paid) + amount_kzt > contract.total_kzt:
+        raise CommerceError("Payments would exceed the contract total", 400)
     payment = Payment(
         contract_id=contract_id,
         amount_kzt=amount_kzt,
         status=PaymentStatus.paid,
-        card_token=card_token,
+        card_token=None,  # the gateway token is never stored; the last four digits are enough for support
         card_last4=card_last4,
         external_id=external_id,
         paid_at=utcnow(),
     )
     db.add(payment)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # the same webhook delivered twice at once: the other request already stored it
+        db.rollback()
+        return db.query(Payment).filter(Payment.external_id == external_id).one()
     db.refresh(payment)
     return payment

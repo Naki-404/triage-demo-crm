@@ -6,7 +6,7 @@ def test_host_whitelist():
     assert host_allowed("localhost")
     assert host_allowed("127.0.0.1")
     assert host_allowed("crm.csip.dev")
-    assert host_allowed("demo.local")
+    assert not host_allowed("demo.local")
     assert not host_allowed("evil.example.com")
 
 

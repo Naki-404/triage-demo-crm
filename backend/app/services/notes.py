@@ -6,15 +6,14 @@ from html import escape
 from sqlalchemy.orm import Session
 
 from .. import vulns
+from ..errors import DomainError
 from ..models import Client, ClientNote, User
 from .access import assert_can_access
 from .deps import DependencyError, post_note_remote
 
 
-class NotesError(Exception):
-    def __init__(self, message: str, status_code: int = 400):
-        super().__init__(message)
-        self.status_code = status_code
+class NotesError(DomainError):
+    status_code = 400
 
 
 def list_notes(db: Session, client_id: int, user: User) -> list[ClientNote]:
@@ -42,6 +41,8 @@ def create_note(db: Session, client_id: int, user: User, body: str) -> ClientNot
 
 
 def note_body_for_response(body: str) -> str:
+    """The note as the browser renders it (the frontend inserts this string as HTML, so this is the one escape).
+    """
     if not vulns.stored_xss_notes():
-        return escape(body)
+        return escape(body, quote=True)
     return body

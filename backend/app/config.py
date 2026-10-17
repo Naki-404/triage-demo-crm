@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     # clean | experiment | vuln — vuln enables VULN_* switches; experiment enables FAULT_*
     CRM_MODE: str = "clean"
+    # The stand API (PATCH /api/stand) exists for the lab only; production refuses it unless explicitly enabled.
+    STAND_CONTROL_ENABLED: bool = True
     SECRET_KEY: str = "change-me"
     COOKIE_SECURE: bool = False
     SESSION_EXPIRE_HOURS: int = 24
@@ -24,6 +26,8 @@ class Settings(BaseSettings):
 
     LOGIN_MAX_FAILURES: int = 5
     LOGIN_LOCKOUT_MINUTES: int = 15
+    # Failed logins from one address (any account) before that address is locked for LOGIN_LOCKOUT_MINUTES
+    LOGIN_IP_MAX_FAILURES: int = 20
 
     SENTRY_DSN: str | None = None
     SENTRY_ENVIRONMENT: str = "demo"
@@ -40,6 +44,8 @@ class Settings(BaseSettings):
     PAYMENT_WEBHOOK_SECRET: str = "bilim-demo-hmac-secret"
     PAYMENT_WEBHOOK_MAX_AGE_SECONDS: int = 300
     EXPORT_DIR: str = "exports"
+    # Built frontend served by the API itself (Docker image); empty in development
+    STATIC_DIR: str = ""
 
     # Stand switches — ignored unless CRM_MODE=experiment
     FAULT_IIN_SECOND_WEIGHTS: bool = False
@@ -74,6 +80,18 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
     @property
+    def is_production(self) -> bool:
+        return (self.ENVIRONMENT or "").strip().lower() in ("production", "prod")
+
+    @property
+    def is_local(self) -> bool:
+        """The app is only reachable from this machine (BASE_URL on loopback or a .localhost/.test name)."""
+        from urllib.parse import urlparse
+
+        host = (urlparse(self.BASE_URL).hostname or "").lower()
+        return host in ("localhost", "127.0.0.1", "::1") or host.endswith((".localhost", ".test"))
+
+    @property
     def is_experiment(self) -> bool:
         mode = (self.CRM_MODE or "").strip().lower()
         return mode == "experiment"
@@ -89,6 +107,29 @@ def _resolve_sqlite(url: str, base: Path) -> str:
         rel = url.replace("sqlite:///./", "")
         return f"sqlite:///{(base / rel).resolve()}"
     return url
+
+
+INSECURE_DEFAULTS = {"SECRET_KEY": "change-me", "PAYMENT_WEBHOOK_SECRET": "bilim-demo-hmac-secret"}
+
+
+def production_problems(cfg: "Settings") -> list[str]:
+    """Settings that must never reach production: default secrets and a non-clean stand mode.
+    A lab stand reachable from outside (BASE_URL not on loopback) may run vuln/experiment modes, but never
+    with the secrets committed to this repository."""
+    if not cfg.is_production and cfg.is_local:
+        return []
+    problems = []
+    for key, default in INSECURE_DEFAULTS.items():
+        value = getattr(cfg, key, "") or ""
+        if value == default or value.startswith("change-me") or len(value) < 16:
+            problems.append(f"{key} has an insecure default")
+    if not cfg.is_production:
+        return problems
+    if (cfg.CRM_MODE or "").lower() != "clean":
+        problems.append("CRM_MODE must be clean in production")
+    if cfg.STAND_CONTROL_ENABLED:
+        problems.append("STAND_CONTROL_ENABLED must be false in production")
+    return problems
 
 
 settings = Settings()

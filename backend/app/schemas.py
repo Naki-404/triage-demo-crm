@@ -21,16 +21,23 @@ class UserOut(BaseModel):
     role: UserRole
     is_active: bool
     max_discount_pct: int = 10
+    webhook_url: str | None = None
 
     model_config = {"from_attributes": True}
 
 
 class UserPatch(BaseModel):
-    """Profile patch. role is accepted only when VULN_MASS_ASSIGNMENT is on."""
+    """Profile patch."""
 
     email: EmailStr | None = None
     phone: str | None = None
     role: UserRole | None = None
+    webhook_url: str | None = Field(default=None, max_length=512)
+
+
+class WebhookTestOut(BaseModel):
+    status_code: int
+    preview: str | None = None
 
 
 class AuthOut(BaseModel):
@@ -114,7 +121,6 @@ class EnrollIn(BaseModel):
     course_id: int | None = None
     package_id: int | None = None
     discount_pct: int = Field(default=0, ge=0, le=100)
-    # Only used when VULN_PRICE_TAMPERING is on.
     price_kzt: Decimal | None = None
 
 

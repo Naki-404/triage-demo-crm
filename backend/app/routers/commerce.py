@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from ..auth import require_roles
@@ -24,6 +25,20 @@ router = APIRouter(tags=["commerce"])
 
 def _http(exc: CommerceError) -> HTTPException:
     return HTTPException(status_code=exc.status_code, detail=str(exc))
+
+
+def _contract_for_user(db: Session, contract_id: int, user: User):
+    """The contract, or 404 when it does not exist or belongs to a client the user may not see."""
+    from ..models import Client, Contract
+    from ..services.access import can_access
+
+    contract = db.get(Contract, contract_id)
+    if contract is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    client = db.get(Client, contract.client_id)
+    if client is None or not can_access(user, client):
+        raise HTTPException(status_code=404, detail="Not found")
+    return contract
 
 
 @router.get("/api/courses", response_model=list[CourseOut])
@@ -115,13 +130,11 @@ def plan_installments(
     contract_id: int,
     payload: InstallmentPlanIn,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ):
-    from ..models import Contract
-
-    contract = db.get(Contract, contract_id)
-    if contract is None:
-        raise HTTPException(status_code=404, detail="Not found")
+    contract = _contract_for_user(db, contract_id, user)
+    if installments.list_for_contract(db, contract_id):
+        raise HTTPException(status_code=409, detail="Installment schedule already exists")
     try:
         rows = installments.build_installment_schedule(db, contract, months=payload.months, first_due=payload.first_due)
     except CommerceError as exc:
@@ -133,8 +146,9 @@ def plan_installments(
 def list_installments_route(
     contract_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.manager, UserRole.viewer)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.manager, UserRole.viewer)),
 ):
+    _contract_for_user(db, contract_id, user)
     rows = installments.list_for_contract(db, contract_id)
     return [InstallmentOut.model_validate(r) for r in rows]
 
@@ -143,8 +157,9 @@ def list_installments_route(
 def list_payments_route(
     contract_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.manager, UserRole.viewer)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.manager, UserRole.viewer)),
 ):
+    _contract_for_user(db, contract_id, user)
     rows = payments.list_for_contract(db, contract_id)
     return [PaymentOut.model_validate(r) for r in rows]
 
@@ -170,6 +185,8 @@ async def payment_webhook(
         )
     except CommerceError as exc:
         raise _http(exc) from exc
+    except ValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid payment payload") from exc
     return PaymentOut.model_validate(payment)
 
 
@@ -177,8 +194,9 @@ async def payment_webhook(
 def export_1c(
     contract_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ):
+    _contract_for_user(db, contract_id, user)
     try:
         data = contracts.export_1c_xml(db, contract_id)
     except CommerceError as exc:

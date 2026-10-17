@@ -45,10 +45,10 @@ def list_customers(
     page_size: int = Query(20, ge=1, le=100),
     q: str | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.manager, UserRole.viewer)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.manager, UserRole.viewer)),
 ):
     try:
-        items, total = customers.list_clients(db, page=page, page_size=page_size, q=q)
+        items, total = customers.list_clients(db, page=page, page_size=page_size, q=q, viewer=user)
     except PoolExhaustedError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     return ClientListOut(
@@ -64,18 +64,16 @@ def search_customers(
     name: str | None = None,
     iin: str | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.manager, UserRole.viewer)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.manager, UserRole.viewer)),
 ):
     if name:
         try:
-            found = customers.search_by_name(db, name)
-        except RuntimeError as exc:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+            found = customers.search_by_name(db, name, viewer=user)
         except PoolExhaustedError as exc:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
         return [ClientOut.model_validate(c) for c in found]
     if iin:
-        client = customers.search_by_iin(db, iin)
+        client = customers.search_by_iin(db, iin, viewer=user)
         return [ClientOut.model_validate(client)] if client else []
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provide name or iin")
 
@@ -84,9 +82,9 @@ def search_customers(
 def export_customers(
     fmt: str = Query("csv", pattern="^(csv|xlsx)$"),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ):
-    items, _ = customers.list_clients(db, page=1, page_size=10_000)
+    items, _ = customers.list_clients(db, page=1, page_size=10_000, viewer=user)
     try:
         if fmt == "xlsx":
             data = customers.export_xlsx(db, items)
@@ -97,13 +95,11 @@ def export_customers(
             media = "text/csv"
             filename = "clients.csv"
     except ExportError as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
-    except TypeError as exc:
-        # FAULT_EXPORT_NO_CONTRACT KeyError path surfaces as AttributeError/TypeError
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
-    except AttributeError as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
-    path = customers.safe_export_path(filename)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="export failed") from exc
+    except (TypeError, AttributeError) as exc:
+        # the traceback goes to Sentry, the client gets a generic message
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="export failed") from exc
+    path = customers.safe_export_path(filename, user.id)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     return Response(
@@ -116,15 +112,14 @@ def export_customers(
 @router.get("/export/file")
 def download_export_file(
     name: str = Query(..., min_length=1),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ):
     try:
-        path = customers.safe_export_path(name)
+        path = customers.safe_export_path(name, user.id)
     except ExportError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     if not path.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
-    # Path traversal vuln may resolve outside EXPORT_DIR — intentional when flag on.
     return Response(content=path.read_bytes(), media_type="application/octet-stream")
 
 
@@ -134,10 +129,7 @@ def get_customer(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.admin, UserRole.manager, UserRole.viewer)),
 ):
-    try:
-        client = customers.get_client(db, client_id, viewer=user)
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="record error") from exc
+    client = customers.get_client(db, client_id, viewer=user)
     if client is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return ClientOut.model_validate(client)

@@ -4,6 +4,8 @@ from __future__ import annotations
 from decimal import Decimal
 from xml.etree import ElementTree as ET
 
+from defusedxml import ElementTree as SafeET
+from defusedxml.common import DefusedXmlException
 from sqlalchemy.orm import Session
 
 from .. import faults, vulns
@@ -33,10 +35,18 @@ def create_contract(
     check_discount_allowed(user, discount_pct)
     if db.query(Contract).filter(Contract.number == number).first():
         raise CommerceError("Contract number already exists", 409)
+    if not enrollment_ids or len(set(enrollment_ids)) != len(enrollment_ids):
+        raise CommerceError("A contract needs distinct enrollments", 400)
     enrollments = db.query(Enrollment).filter(Enrollment.id.in_(enrollment_ids), Enrollment.client_id == client_id).all()
     if len(enrollments) != len(enrollment_ids):
         raise CommerceError("Enrollment mismatch", 400)
+    if any(e.contract_id is not None for e in enrollments):
+        raise CommerceError("Enrollment is already on a contract", 409)
     total = sum((e.price_kzt for e in enrollments), Decimal("0"))
+    already_discounted = any(e.discount_pct for e in enrollments)
+    if discount_pct and already_discounted and not faults.discount_stacks():
+        # One discount per sale: either on the enrollment or on the contract, never both.
+        raise CommerceError("Enrollments already carry a discount; the contract cannot add another", 409)
     if discount_pct and not faults.discount_stacks():
         total = apply_discount(total, discount_pct)
     elif discount_pct and faults.discount_stacks():
@@ -78,8 +88,27 @@ def import_1c_xml(db: Session, raw: bytes) -> dict:
             raise CommerceError("XXE payload accepted (vuln demo)", 500)
         root = ET.fromstring(raw, parser=parser)
     else:
-        if b"<!DOCTYPE" in raw.upper() or b"<!ENTITY" in raw.upper():
+        # Decode first (a UTF-16 document hides "<!DOCTYPE" from a byte search), then let defusedxml refuse
+        # DTDs, entities and external references regardless of how they are spelled.
+        text = _decode_xml(raw)
+        if "<!DOCTYPE" in text.upper() or "<!ENTITY" in text.upper():
             raise CommerceError("XML with DOCTYPE/ENTITY is not allowed", 400)
-        root = ET.fromstring(raw)
+        try:
+            root = SafeET.fromstring(text, forbid_dtd=True, forbid_entities=True, forbid_external=True)
+        except DefusedXmlException as exc:
+            raise CommerceError("XML with DOCTYPE/ENTITY is not allowed", 400) from exc
+        except ET.ParseError as exc:
+            raise CommerceError("Malformed XML", 400) from exc
     number = root.findtext("Number") or root.findtext(".//{urn:1c:bilim}Number")
     return {"number": number, "ok": True}
+
+
+def _decode_xml(raw: bytes) -> str:
+    for bom, encoding in ((b"\xff\xfe", "utf-16-le"), (b"\xfe\xff", "utf-16-be"), (b"\xef\xbb\xbf", "utf-8-sig")):
+        if raw.startswith(bom):
+            return raw.decode(encoding, errors="replace")
+    if len(raw) > 1 and raw[0] == 0x3C and raw[1] == 0:
+        return raw.decode("utf-16-le", errors="replace")
+    if len(raw) > 1 and raw[0] == 0 and raw[1] == 0x3C:
+        return raw.decode("utf-16-be", errors="replace")
+    return raw.decode("utf-8", errors="replace")

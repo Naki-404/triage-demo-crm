@@ -27,8 +27,18 @@ class CrmClient:
         self.admin_password = admin_password
         self.min_interval = min_interval_ms / 1000.0
         self._last = 0.0
-        self._client = httpx.Client(base_url=self.base_url, timeout=timeout, follow_redirects=True)
+        # Redirects are never followed: a 3xx from the target must not send attack traffic to a third host.
+        self._client = httpx.Client(base_url=self.base_url, timeout=timeout, follow_redirects=False)
         self._authed = False
+
+    def handshake(self) -> dict:
+        """Confirm the target is a Qazaq CRM stand before any scenario runs (health body + request-id echo)."""
+        rid = uuid.uuid4().hex
+        res = self._client.get("/health", headers={"X-Request-ID": rid})
+        body = res.json() if res.headers.get("content-type", "").startswith("application/json") else {}
+        if res.status_code != 200 or body.get("status") != "ok" or res.headers.get("X-Request-ID") != rid:
+            raise RuntimeError(f"target does not answer like a Qazaq CRM stand: HTTP {res.status_code}")
+        return body
 
     def close(self) -> None:
         self._client.close()

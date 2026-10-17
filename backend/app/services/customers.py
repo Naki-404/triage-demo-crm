@@ -13,17 +13,34 @@ from sqlalchemy.orm import Session
 
 from .. import faults, vulns
 from ..config import settings
+from ..errors import DomainError
 from ..iin import validate_iin
 from ..models import Client, Contract, User, UserRole
 from .access import ClientAccessError, assert_can_access
 
 
-class ExportError(RuntimeError):
-    pass
+class ExportError(DomainError):
+    status_code = 500
 
 
-class PoolExhaustedError(RuntimeError):
-    pass
+class PoolExhaustedError(DomainError):
+    status_code = 503
+
+
+class RecordError(DomainError):
+    """A stored record cannot be read back (corrupt serialisation): the client gets a generic 500."""
+
+    status_code = 500
+
+
+FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_safe(value: str) -> str:
+    """Spreadsheet-safe cell: a leading formula character is quoted so Excel/LibreOffice do not evaluate it."""
+    if value and value[0] in FORMULA_PREFIXES:
+        return "'" + value
+    return value
 
 
 def _check_pool() -> None:
@@ -54,9 +71,16 @@ def create_client(
     return client
 
 
-def list_clients(db: Session, *, page: int, page_size: int, q: str | None = None) -> tuple[list[Client], int]:
+def _scoped(query, viewer: User | None):
+    """Managers see their own clients; admins and viewers see everything (the IDOR flag lifts the scope)."""
+    if viewer is not None and viewer.role == UserRole.manager and not vulns.idor_customer():
+        return query.filter(Client.owner_id == viewer.id)
+    return query
+
+
+def list_clients(db: Session, *, page: int, page_size: int, q: str | None = None, viewer: User | None = None) -> tuple[list[Client], int]:
     _check_pool()
-    query = db.query(Client)
+    query = _scoped(db.query(Client), viewer)
     if q:
         like = f"%{q}%"
         query = query.filter((Client.name.ilike(like)) | (Client.iin.like(like)))
@@ -65,24 +89,25 @@ def list_clients(db: Session, *, page: int, page_size: int, q: str | None = None
     return items, total
 
 
-def search_by_name(db: Session, name: str) -> list[Client]:
+def search_by_name(db: Session, name: str, viewer: User | None = None) -> list[Client]:
     _check_pool()
-    # VULN_SQLI_SEARCH intentional, experiment only — raw concatenation.
     if vulns.sqli_search() or faults.name_search_uses_raw_sql():
         sql = text(f"SELECT id FROM clients WHERE name = '{name}'")
         try:
             ids = [row[0] for row in db.execute(sql).all()]
         except Exception as exc:
-            raise RuntimeError(str(exc)) from exc
+            # The database error (and the injected SQL) is for the log; the client sees a generic 500.
+            db.rollback()
+            raise RecordError("search failed") from exc
         if not ids:
             return []
-        return db.query(Client).filter(Client.id.in_(ids)).all()
-    return db.query(Client).filter(Client.name == name).all()
+        return _scoped(db.query(Client).filter(Client.id.in_(ids)), viewer).all()
+    return _scoped(db.query(Client).filter(Client.name == name), viewer).all()
 
 
-def search_by_iin(db: Session, iin: str) -> Client | None:
+def search_by_iin(db: Session, iin: str, viewer: User | None = None) -> Client | None:
     _check_pool()
-    return db.query(Client).filter(Client.iin == iin).first()
+    return _scoped(db.query(Client).filter(Client.iin == iin), viewer).first()
 
 
 def get_client(db: Session, client_id: int, viewer: User | None = None) -> Client | None:
@@ -96,7 +121,10 @@ def get_client(db: Session, client_id: int, viewer: User | None = None) -> Clien
         except ClientAccessError:
             return None
     if client.meta_json:
-        json.loads(client.meta_json)
+        try:
+            json.loads(client.meta_json)
+        except ValueError as exc:
+            raise RecordError("record error") from exc
     return client
 
 
@@ -136,7 +164,6 @@ def _contract_number(db: Session, client: Client) -> str:
         .first()
     )
     if faults.export_requires_no_contract_bug():
-        # Bug: assume contract always exists → KeyError when missing.
         return contract.number  # type: ignore[union-attr]
     return contract.number if contract else ""
 
@@ -147,19 +174,17 @@ def _row(db: Session, client: Client) -> dict[str, str]:
     if faults.export_fails_on_empty_field() and (phone == "" or email == ""):
         raise ExportError(f"cannot export client {client.id}: required field is empty")
     contract_no = _contract_number(db, client)
-    name = client.name
-    # VULN_CSV_INJECTION intentional — do not sanitize formula prefixes.
-    if not vulns.csv_injection():
-        if name and name[0] in ("=", "+", "-", "@"):
-            name = "'" + name
-    return {
+    row = {
         "id": str(client.id),
-        "name": name,
+        "name": client.name,
         "iin": client.iin,
         "phone": phone,
         "email": email,
         "contract": contract_no,
     }
+    if vulns.csv_injection():
+        return row
+    return {key: csv_safe(value) for key, value in row.items()}
 
 
 def export_csv(db: Session, clients: Iterable[Client]) -> bytes:
@@ -184,12 +209,14 @@ def export_xlsx(db: Session, clients: Iterable[Client]) -> bytes:
     return out.getvalue()
 
 
-def safe_export_path(filename: str) -> Path:
+def safe_export_path(filename: str, user_id: int | None = None) -> Path:
     base = Path(settings.EXPORT_DIR).resolve()
     base.mkdir(parents=True, exist_ok=True)
-    # VULN_PATH_TRAVERSAL_EXPORT intentional — join without sanitizing.
     if vulns.path_traversal_export():
         return (base / filename).resolve()
+    if user_id is not None:
+        # one folder per user: a manager can never download the file an admin exported (all clients)
+        base = (base / f"u{int(user_id)}").resolve()
     candidate = (base / Path(filename).name).resolve()
     if not str(candidate).startswith(str(base)):
         raise ExportError("invalid export path")

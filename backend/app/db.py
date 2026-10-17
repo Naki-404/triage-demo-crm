@@ -22,24 +22,20 @@ if settings.DATABASE_URL.startswith("sqlite"):
 
 
 def ensure_schema() -> None:
-    """Bring DB to Alembic head (stamp empty DBs, upgrade otherwise)."""
+    """Bring the database to the Alembic head. Migrations are the only source of the schema: `create_all` plus
+    `stamp` would leave a fresh database at head with whatever the models say today and skip every later
+    migration's data step."""
     from pathlib import Path
 
     from alembic import command
     from alembic.config import Config
-    from alembic.runtime.migration import MigrationContext
 
     from . import models  # noqa: F401
 
-    Base.metadata.create_all(bind=engine)
     root = Path(__file__).resolve().parents[1]
     cfg = Config(str(root / "alembic.ini"))
-    with engine.connect() as conn:
-        current = MigrationContext.configure(conn).get_current_revision()
-    if current is None:
-        command.stamp(cfg, "head")
-    else:
-        command.upgrade(cfg, "head")
+    cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
+    command.upgrade(cfg, "head")
 
 
 def get_db():

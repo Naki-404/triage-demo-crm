@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import argparse
+import os
 import random
+import secrets
 from datetime import date
 from decimal import Decimal
 
@@ -40,14 +42,31 @@ COURSES = [
 ]
 
 
+DEV_PASSWORDS = {"admin": "Admin-2026!", "manager": "Manager-2026!", "viewer": "Viewer-2026!"}
+
+
+def _seed_password(username: str) -> str:
+    """SEED_<USER>_PASSWORD from the environment; the well-known lab passwords only on a local, non-production stand."""
+    from app.config import settings
+
+    value = os.environ.get(f"SEED_{username.upper()}_PASSWORD")
+    if value:
+        return value
+    if settings.is_production or not settings.is_local:
+        generated = secrets.token_urlsafe(14)
+        print(f"seed: generated password for {username} (shown once): {generated}")
+        return generated
+    return DEV_PASSWORDS[username]
+
+
 def seed(force: bool = False) -> None:
     ensure_schema()
     db = SessionLocal()
     try:
         defaults = [
-            ("admin", "admin@example.com", "Admin-2026!", UserRole.admin, 100),
-            ("manager", "manager@example.com", "Manager-2026!", UserRole.manager, 15),
-            ("viewer", "viewer@example.com", "Viewer-2026!", UserRole.viewer, 0),
+            ("admin", "admin@example.com", _seed_password("admin"), UserRole.admin, 100),
+            ("manager", "manager@example.com", _seed_password("manager"), UserRole.manager, 15),
+            ("viewer", "viewer@example.com", _seed_password("viewer"), UserRole.viewer, 0),
         ]
         for username, email, password, role, max_disc in defaults:
             existing = db.query(User).filter(User.username == username).first()

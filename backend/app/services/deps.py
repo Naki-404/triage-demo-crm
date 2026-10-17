@@ -2,10 +2,11 @@ import httpx
 
 from .. import faults
 from ..config import settings
+from ..errors import DomainError
 
 
-class DependencyError(RuntimeError):
-    pass
+class DependencyError(DomainError):
+    status_code = 503
 
 
 def check_tax_status(iin: str) -> dict:
@@ -19,14 +20,15 @@ def check_tax_status(iin: str) -> dict:
     except httpx.TimeoutException as err:
         raise DependencyError("tax service timed out") from err
     except Exception as err:
-        raise DependencyError(f"tax service unavailable: {err}") from err
+        # the cause (URL with ?iin=, exception text) goes to Sentry via the chained exception, not to the client
+        raise DependencyError("tax service unavailable") from err
 
 
 def post_note_remote(client_id: int, body: str) -> dict | None:
     """Forward note to external notes service.
 
     In clean mode a missing upstream is soft-failed (local note still saved).
-    In experiment mode connection failures surface as DependencyError; FAULT_NOTES_DOWN always raises.
+    In experiment mode connection failures surface as DependencyError.
     """
     if faults.notes_unavailable():
         raise DependencyError("notes service unavailable")

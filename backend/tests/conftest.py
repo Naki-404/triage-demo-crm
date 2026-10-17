@@ -11,6 +11,8 @@ os.environ["DATABASE_URL"] = "sqlite://"
 os.environ["CRM_MODE"] = "clean"
 os.environ["LOG_SHIPPER"] = "null"
 os.environ["SECRET_KEY"] = "test-secret"
+os.environ["SENTRY_DSN"] = ""
+os.environ["ENVIRONMENT"] = "test"
 
 from decimal import Decimal
 
@@ -111,3 +113,38 @@ def client(db_session):
 @pytest.fixture()
 def db(db_session):
     return db_session
+
+
+def _reset_stand() -> None:
+    from app import auth as auth_module
+    from app.config import settings
+
+    settings.CRM_MODE = "clean"
+    for key in list(type(settings).model_fields):
+        if key.startswith("FAULT_") or key.startswith("VULN_"):
+            setattr(settings, key, False)
+    auth_module._ip_failures.clear()
+
+
+@pytest.fixture(autouse=True)
+def _clean_stand_between_tests():
+    """Every test starts and ends on a clean stand; flags never leak between tests."""
+    _reset_stand()
+    yield
+    _reset_stand()
+
+
+@pytest.fixture()
+def stand_mode():
+    """stand_mode("vuln", VULN_SQLI_SEARCH=True) switches the stand for one test; the autouse fixture rolls it back."""
+    from app.config import settings
+
+    def _set(mode: str, **flags: bool):
+        settings.CRM_MODE = mode
+        for key, value in flags.items():
+            if not hasattr(settings, key):
+                raise KeyError(key)
+            setattr(settings, key, value)
+        return settings
+
+    return _set

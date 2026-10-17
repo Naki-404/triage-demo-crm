@@ -35,7 +35,8 @@ export function ClientNotesPanel(props: Props) {
         <ul style={{ paddingLeft: "1.1rem", margin: "0.75rem 0 0" }}>
           {notes.map((n) => (
             <li key={n.id} style={{ marginBottom: "0.65rem" }}>
-              <div>{n.body}</div>
+              {/* The API escapes the body once (clean mode); rendering it as HTML is the single escaping step. */}
+              <div dangerouslySetInnerHTML={{ __html: n.body }} />
               <div className="muted" style={{ fontSize: "0.8rem" }}>
                 {new Date(n.created_at).toLocaleString()}
               </div>

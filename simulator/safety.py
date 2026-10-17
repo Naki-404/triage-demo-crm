@@ -4,7 +4,8 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 ALLOWED_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "crm.csip.dev"})
-ALLOWED_SUFFIXES = (".local",)
+# No wildcard suffixes: "*.local" would match any mDNS host on the LAN, which is not "a system you operate".
+ALLOWED_SUFFIXES: tuple[str, ...] = ()
 
 
 class TargetNotAllowedError(SystemExit):
@@ -31,6 +32,6 @@ def assert_target_allowed(base_url: str, *, i_own_this_target: bool) -> None:
         return
     raise TargetNotAllowedError(
         f"Target host {host!r} is not whitelisted. "
-        f"Allowed: {sorted(ALLOWED_HOSTS)} and *{ALLOWED_SUFFIXES}. "
+        f"Allowed: {sorted(ALLOWED_HOSTS)}. "
         f"Pass --i-own-this-target only for a system you operate."
     )

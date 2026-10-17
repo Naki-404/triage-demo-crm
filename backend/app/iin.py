@@ -8,8 +8,12 @@ from __future__ import annotations
 
 import random
 import re
+from datetime import date
 
 from . import faults
+
+# 7th digit: century and sex. 1/2 = 1800s, 3/4 = 1900s, 5/6 = 2000s; 0 and 7–9 are not issued.
+CENTURY_BY_DIGIT = {1: 1800, 2: 1800, 3: 1900, 4: 1900, 5: 2000, 6: 2000}
 
 W1 = list(range(1, 12))
 W2 = [3, 4, 5, 6, 7, 8, 9, 10, 11, 1, 2]
@@ -35,7 +39,7 @@ def needs_second_weights(first11: str) -> bool:
 
 
 def _check_digit_first_weights_only(first11: str) -> int | None:
-    """Legacy path used by one stand switch: no recomputation with W2."""
+    """Check digit with the first weight set only."""
     digits = [int(c) for c in first11]
     total = sum(d * w for d, w in zip(digits, W1, strict=True)) % 11
     if total == 10:
@@ -46,13 +50,26 @@ def _check_digit_first_weights_only(first11: str) -> int | None:
 def validate_iin(iin: str) -> None:
     if not re.fullmatch(r"\d{12}", iin or ""):
         raise InvalidIINError("IIN must contain 12 digits")
-    month, day = int(iin[2:4]), int(iin[4:6])
-    if not (1 <= month <= 12 and 1 <= day <= 31):
-        raise InvalidIINError("IIN contains an invalid birth date")
+    birth_date(iin)
     prefix = iin[:11]
     expected = _check_digit_first_weights_only(prefix) if faults.iin_skips_second_weights() else check_digit(prefix)
     if expected is None or expected != int(iin[11]):
         raise InvalidIINError("Некорректный ИИН: checksum does not match")
+
+
+def birth_date(iin: str) -> date:
+    """The birth date encoded in the IIN; raises when the century digit or the calendar date is impossible."""
+    century = CENTURY_BY_DIGIT.get(int(iin[6]))
+    if century is None:
+        raise InvalidIINError("IIN contains an invalid century digit")
+    year, month, day = century + int(iin[0:2]), int(iin[2:4]), int(iin[4:6])
+    try:
+        born = date(year, month, day)
+    except ValueError as exc:
+        raise InvalidIINError("IIN contains an invalid birth date") from exc
+    if born > date.today():
+        raise InvalidIINError("IIN contains a birth date in the future")
+    return born
 
 
 def _random_prefix(rng: random.Random) -> str:

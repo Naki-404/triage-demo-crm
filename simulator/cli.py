@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import uuid
 from pathlib import Path
@@ -16,15 +17,28 @@ from .journal import Journal
 from .safety import TargetNotAllowedError, assert_target_allowed
 from .scenarios import GENERATORS, GROUPS, SCENARIOS
 from .scenarios.base import ScenarioContext
-from .seeds import clamp_seed
+from .seeds import clamp_seed, derive_seed
 
 
 def _band_for_set(set_name: str) -> str:
-    if set_name == "train":
-        return "train"
+    if set_name in ("train", "dev"):
+        return set_name
     if set_name in ("injection",) or set_name.startswith("injection"):
         return "injection"
     return "test"
+
+
+def _connect(args: argparse.Namespace, journal: Journal) -> CrmClient:
+    """Client with the target handshake done and the stand snapshot recorded in the journal."""
+    client = _make_client(args)
+    client.handshake()
+    try:
+        client.ensure_login(as_admin=True)
+        res = client.get("/api/stand")
+        journal.stand = res.json() if res.status_code == 200 else {"unavailable": res.status_code}
+    except (RuntimeError, ValueError, OSError) as exc:
+        journal.stand = {"unavailable": type(exc).__name__}
+    return client
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -33,10 +47,10 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument("--i-own-this-target", action="store_true")
     common.add_argument("--journal", type=Path, default=None)
     common.add_argument("--rate-ms", type=float, default=50.0)
-    common.add_argument("--user", default="manager")
-    common.add_argument("--password", default="Manager-2026!")
-    common.add_argument("--admin-user", default="admin")
-    common.add_argument("--admin-password", default="Admin-2026!")
+    common.add_argument("--user", default=os.environ.get("SIM_USER", "manager"))
+    common.add_argument("--password", default=os.environ.get("SIM_PASSWORD", "Manager-2026!"))
+    common.add_argument("--admin-user", default=os.environ.get("SIM_ADMIN_USER", "admin"))
+    common.add_argument("--admin-password", default=os.environ.get("SIM_ADMIN_PASSWORD", "Admin-2026!"))
 
     p = argparse.ArgumentParser(prog="simulator", description="Safe load / attack simulator for Qazaq CRM")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -45,13 +59,13 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("name")
     run.add_argument("--count", type=int, default=1)
     run.add_argument("--seed", type=int, default=2_000_001)
-    run.add_argument("--set", dest="set_name", default="main", choices=["main", "invariance", "contrast", "injection", "train"])
+    run.add_argument("--set", dest="set_name", default="main", choices=["main", "invariance", "contrast", "injection", "train", "dev"])
     run.add_argument("--with-background", action="store_true")
 
     gen = sub.add_parser("generate", parents=[common], help="Run invariance/contrast generator")
     gen.add_argument("name", choices=list(GENERATORS))
     gen.add_argument("--seed", type=int, default=2_000_100)
-    gen.add_argument("--set", dest="set_name", default="invariance", choices=["invariance", "contrast", "main", "train"])
+    gen.add_argument("--set", dest="set_name", default="invariance", choices=["invariance", "contrast", "main", "train", "dev"])
 
     sub.add_parser("list", help="List scenarios and generators")
     return p
@@ -99,12 +113,12 @@ def cmd_run(args: argparse.Namespace) -> int:
     assert_target_allowed(args.target, i_own_this_target=args.i_own_this_target)
     names = _resolve_names(args.name)
     journal = Journal(args.journal)
-    client = _make_client(args)
+    client = _connect(args, journal)
     try:
         for i in range(args.count):
             for name in names:
                 if args.with_background:
-                    bg_seed = clamp_seed(args.seed + i * 100 + 7, band="train")
+                    bg_seed = derive_seed(clamp_seed(args.seed, band="train"), "background_manager", i)
                     bg_ctx = ScenarioContext(
                         client=client,
                         journal=journal,
@@ -133,7 +147,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 def cmd_generate(args: argparse.Namespace) -> int:
     assert_target_allowed(args.target, i_own_this_target=args.i_own_this_target)
     journal = Journal(args.journal)
-    client = _make_client(args)
+    client = _connect(args, journal)
     band = _band_for_set(args.set_name)
     seed = clamp_seed(args.seed, band=band)
     ctx = ScenarioContext(client=client, journal=journal, seed=seed, set_name=args.set_name, target=args.target)

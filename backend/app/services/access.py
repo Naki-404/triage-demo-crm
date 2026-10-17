@@ -2,13 +2,17 @@
 from __future__ import annotations
 
 from .. import vulns
+from ..errors import DomainError
 from ..models import Client, User, UserRole
 
 
-class ClientAccessError(Exception):
-    def __init__(self, message: str = "Not found", status_code: int = 404):
-        super().__init__(message)
-        self.status_code = status_code
+class ClientAccessError(DomainError):
+    """A client the user may not see answers 404, so the id space is not enumerable from the status code."""
+
+    status_code = 404
+
+    def __init__(self, message: str = "Not found", status_code: int | None = None):
+        super().__init__(message, status_code)
 
 
 def can_access(user: User, client: Client) -> bool:

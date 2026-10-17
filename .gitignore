@@ -43,3 +43,12 @@ htmlcov/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Database dumps and model files never belong in git
+backups/
+*.dump
+*.sql
+*.gguf
+*.safetensors
+models/
+runs/

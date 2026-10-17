@@ -23,6 +23,7 @@ class JournalEvent:
     detail: str | None
     time: str
     target: str
+    stand: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -33,11 +34,15 @@ class Journal:
         self.path = path
         self._fh: TextIO | None = None
         self.events: list[JournalEvent] = []
+        # Stand snapshot (mode + flags) at the time of the run; written into every row so a label can be audited.
+        self.stand: dict[str, Any] | None = None
         if path is not None:
             path.parent.mkdir(parents=True, exist_ok=True)
             self._fh = path.open("a", encoding="utf-8")
 
     def write(self, event: JournalEvent) -> None:
+        if event.stand is None and self.stand is not None:
+            event.stand = dict(self.stand)
         self.events.append(event)
         if self._fh is not None:
             self._fh.write(json.dumps(event.to_dict(), ensure_ascii=False) + "\n")

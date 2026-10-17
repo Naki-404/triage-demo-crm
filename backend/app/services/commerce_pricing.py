@@ -3,15 +3,14 @@ from __future__ import annotations
 
 from decimal import ROUND_HALF_UP, Decimal
 
+from ..errors import DomainError
 from ..models import User, UserRole
 
 TWOPLACES = Decimal("0.01")
 
 
-class CommerceError(Exception):
-    def __init__(self, message: str, status_code: int = 400):
-        super().__init__(message)
-        self.status_code = status_code
+class CommerceError(DomainError):
+    status_code = 400
 
 
 def apply_discount(price: Decimal, discount_pct: int) -> Decimal:
