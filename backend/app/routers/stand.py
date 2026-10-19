@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from .. import faults, vulns
 from ..auth import require_roles
 from ..config import settings
 from ..models import User, UserRole
-from ..schemas import StandPatch
+from ..schemas import CustomLogIn, SimulateIn, StandPatch
+from ..simulate import list_scenarios, run_simulation, ship_custom_log
 
 router = APIRouter(prefix="/api/stand", tags=["stand"])
 
@@ -17,6 +18,66 @@ def _ensure_stand_control() -> None:
 @router.get("")
 def get_stand(_: User = Depends(require_roles(UserRole.admin))):
     return {**faults.snapshot(), **{k: vulns.active(k) for k in vulns.all_keys()}}
+
+
+@router.get("/simulate")
+def get_simulate_catalog(_: User = Depends(require_roles(UserRole.admin))):
+    """Attack-log scenarios available on the stand UI (admin only)."""
+    _ensure_stand_control()
+    return {"scenarios": list_scenarios()}
+
+
+@router.post("/simulate")
+def post_simulate(
+    payload: SimulateIn,
+    request: Request,
+    user: User = Depends(require_roles(UserRole.admin)),
+):
+    """Inject ECS / Sentry events that look like a chosen attack pattern (lab only)."""
+    _ensure_stand_control()
+    try:
+        return run_simulation(
+            payload.scenario,
+            count=payload.count,
+            request=request,
+            actor=user.username,
+        )
+    except KeyError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"unknown scenario: {payload.scenario}",
+        ) from None
+
+
+@router.post("/simulate/custom")
+def post_simulate_custom(
+    payload: CustomLogIn,
+    request: Request,
+    user: User = Depends(require_roles(UserRole.admin)),
+):
+    """Inject a free-form ECS / Sentry log typed on the stand UI (lab only)."""
+    _ensure_stand_control()
+    try:
+        return ship_custom_log(
+            message=payload.message,
+            request=request,
+            actor=user.username,
+            level=payload.level,
+            method=payload.method,
+            path=payload.path,
+            status_code=payload.status_code,
+            action=payload.action,
+            attack=payload.attack,
+            client_ip=payload.client_ip,
+            user_id=payload.user_id,
+            query=payload.query,
+            body=payload.body,
+            user_agent=payload.user_agent,
+            count=payload.count,
+            extra=payload.extra,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from None
 
 
 @router.patch("")

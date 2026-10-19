@@ -207,3 +207,28 @@ class HealthOut(BaseModel):
     version: str
     crm_mode: str
     company: str = "Bilim Academy"
+
+
+class SimulateIn(BaseModel):
+    scenario: str = Field(min_length=1, max_length=64)
+    count: int | None = Field(default=None, ge=1, le=20)
+
+
+class CustomLogIn(BaseModel):
+    """Free-form log line for the stand UI (not a preset attack scenario)."""
+
+    message: str = Field(min_length=1, max_length=2000)
+    level: Literal["info", "warning", "error"] = "warning"
+    method: str = "POST"
+    path: str = "/api/custom"
+    status_code: int = Field(default=500, ge=100, le=599)
+    action: str = "stand.custom_log"
+    attack: str | None = None
+    client_ip: str | None = None
+    user_id: str | None = None
+    query: str | None = None
+    body: str | None = None
+    user_agent: str | None = None
+    count: int = Field(default=1, ge=1, le=20)
+    extra: dict[str, str | int | float | bool | None] | None = None
+

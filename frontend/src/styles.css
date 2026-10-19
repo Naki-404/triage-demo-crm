@@ -591,3 +591,65 @@ select {
 .nowrap {
   white-space: nowrap;
 }
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.sim-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.85rem;
+}
+
+.sim-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  background: color-mix(in srgb, var(--bg-elev) 85%, transparent);
+}
+
+.sim-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.pill {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.btn-accent {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+}
+
+.btn-accent:disabled {
+  opacity: 0.55;
+}
+
+.ok {
+  color: var(--ok);
+  margin: 0.5rem 0 0;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.75rem 1rem;
+}
+
+.custom-log-form .field textarea {
+  resize: vertical;
+  min-height: 4.5rem;
+}

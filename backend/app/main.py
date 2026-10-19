@@ -65,9 +65,14 @@ def create_app() -> FastAPI:
 
     @app.get("/api/stand/public")
     def stand_public():
-        """Minimal mode signal for the frontend (no auth)."""
+        """Minimal mode signal for the frontend (no auth).
+
+        Stand UI (faults + attack-log simulation) is available whenever stand control
+        is enabled outside production — including clean mode, so admins can inject
+        demo security logs without flipping FAULT_*/VULN_* switches.
+        """
         return {
-            "stand_ui": (settings.is_experiment or settings.is_vuln) and settings.STAND_CONTROL_ENABLED and not settings.is_production,
+            "stand_ui": settings.STAND_CONTROL_ENABLED and not settings.is_production,
             "company": settings.COMPANY_NAME,
         }
 

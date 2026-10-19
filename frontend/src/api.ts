@@ -37,6 +37,41 @@ export type {
   User,
 };
 
+export type SimulateScenario = {
+  id: string;
+  title_ru: string;
+  title_en: string;
+  description_ru: string;
+  description_en: string;
+  attack: string;
+  default_events: number;
+  max_events: number;
+};
+
+export type SimulateResult = {
+  scenario: string;
+  attack: string;
+  events: number;
+  request_ids: string[];
+  shipped: boolean;
+};
+
+export type CustomLogIn = {
+  message: string;
+  level?: "info" | "warning" | "error";
+  method?: string;
+  path?: string;
+  status_code?: number;
+  action?: string;
+  attack?: string;
+  client_ip?: string;
+  user_id?: string;
+  query?: string;
+  body?: string;
+  user_agent?: string;
+  count?: number;
+};
+
 function qs(params: Record<string, string | number | boolean | undefined | null>): string {
   const parts = Object.entries(params)
     .filter(([, v]) => v !== undefined && v !== null && v !== "" && v !== false)
@@ -56,6 +91,17 @@ export const api = {
   stand: () => request<Record<string, boolean | string>>("/api/stand"),
   patchStand: (body: Record<string, unknown>) =>
     request<Record<string, boolean | string>>("/api/stand", { method: "PATCH", body: JSON.stringify(body) }),
+  simulateCatalog: () => request<{ scenarios: SimulateScenario[] }>("/api/stand/simulate"),
+  simulate: (scenario: string, count?: number) =>
+    request<SimulateResult>("/api/stand/simulate", {
+      method: "POST",
+      body: JSON.stringify(count ? { scenario, count } : { scenario }),
+    }),
+  simulateCustom: (body: CustomLogIn) =>
+    request<SimulateResult>("/api/stand/simulate/custom", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   listClients: (opts?: { q?: string; page?: number; page_size?: number }) => {
     const page = opts?.page ?? 1;
     const page_size = opts?.page_size ?? 25;
