@@ -219,7 +219,7 @@ class CustomLogIn(BaseModel):
 
     message: str = Field(min_length=1, max_length=2000)
     level: Literal["info", "warning", "error"] = "warning"
-    method: str = "POST"
+    method: Literal["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] = "POST"
     path: str = "/api/custom"
     status_code: int = Field(default=500, ge=100, le=599)
     action: str = "stand.custom_log"

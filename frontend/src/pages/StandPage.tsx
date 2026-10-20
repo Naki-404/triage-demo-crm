@@ -183,7 +183,18 @@ export function StandPage({ lang }: Props) {
             </label>
             <label className="field">
               <span>method</span>
-              <input value={custom.method} onChange={(e) => setField("method", e.target.value)} />
+              <select
+                value={custom.method}
+                onChange={(e) => setField("method", e.target.value as CustomLogIn["method"])}
+              >
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+                <option value="PUT">PUT</option>
+                <option value="PATCH">PATCH</option>
+                <option value="DELETE">DELETE</option>
+                <option value="HEAD">HEAD</option>
+                <option value="OPTIONS">OPTIONS</option>
+              </select>
             </label>
             <label className="field">
               <span>path</span>

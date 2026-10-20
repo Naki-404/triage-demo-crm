@@ -59,7 +59,7 @@ export type SimulateResult = {
 export type CustomLogIn = {
   message: string;
   level?: "info" | "warning" | "error";
-  method?: string;
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
   path?: string;
   status_code?: number;
   action?: string;
