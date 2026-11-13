@@ -12,10 +12,22 @@ from .. import faults, vulns
 from ..models import Client, Contract, ContractStatus, Enrollment, User, utcnow
 from .access import assert_can_access
 from .commerce_pricing import CommerceError, apply_discount, check_discount_allowed
+from .infra_faults import check_orphans
 
 
 def list_for_client(db: Session, client_id: int) -> list[Contract]:
-    return db.query(Contract).filter(Contract.client_id == client_id).order_by(Contract.id.desc()).all()
+    rows = db.query(Contract).filter(Contract.client_id == client_id).order_by(Contract.id.desc()).all()
+    if faults.legacy_amount_overflow() and rows:
+        from .customers import LegacyDataError
+
+        import random
+
+        amount = f"{random.choice([1.2, 3.4, 9.9, 4.5, 7.0])}E+{random.randint(11, 16)}"
+        raise LegacyDataError(
+            f"contract {rows[0].number}: total_kzt={amount} from legacy import does not fit NUMERIC(12,2); row skipped by reader")
+    if rows:
+        check_orphans(rows[0].number)
+    return rows
 
 
 def create_contract(

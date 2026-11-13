@@ -3,6 +3,7 @@ import httpx
 from .. import faults
 from ..config import settings
 from ..errors import DomainError
+from .infra_faults import tax_network_error
 
 
 class DependencyError(DomainError):
@@ -12,6 +13,9 @@ class DependencyError(DomainError):
 def check_tax_status(iin: str) -> dict:
     if faults.tax_times_out():
         raise DependencyError("tax service timed out")
+    network_error = tax_network_error()
+    if network_error:
+        raise DependencyError(network_error)
     try:
         with httpx.Client(timeout=settings.TAX_TIMEOUT_SECONDS) as client:
             res = client.get(settings.TAX_SERVICE_URL, params={"iin": iin})

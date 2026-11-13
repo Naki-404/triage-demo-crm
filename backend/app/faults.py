@@ -55,6 +55,61 @@ def installment_rounding_bug() -> bool:
     return active("FAULT_INSTALLMENT_ROUNDING")
 
 
+def replica_lag() -> bool:
+    """When on: card reads go to a read replica that is behind the primary."""
+    return active("FAULT_REPLICA_LAG")
+
+
+def legacy_amount_overflow() -> bool:
+    """When on: a contract imported from the legacy system carries an amount the NUMERIC(12,2) column cannot hold."""
+    return active("FAULT_LEGACY_AMOUNT")
+
+
+def disk_full() -> bool:
+    """When on: the export volume has no free space left."""
+    return active("FAULT_DISK_FULL")
+
+
 def export_requires_no_contract_bug() -> bool:
     """When on: export crashes if client has no contract (KeyError / missing field)."""
     return active("FAULT_EXPORT_NO_CONTRACT")
+
+
+def cache_down() -> bool:
+    """When on: the shared cache cluster does not answer."""
+    return active("FAULT_CACHE_DOWN")
+
+
+def tax_dns_failure() -> bool:
+    """When on: the tax service host name does not resolve."""
+    return active("FAULT_TAX_DNS")
+
+
+def tax_cert_expired() -> bool:
+    """When on: the tax service TLS certificate has expired."""
+    return active("FAULT_TAX_CERT")
+
+
+def id_sequence_behind() -> bool:
+    """When on: the clients id sequence is behind max(id) after a bulk import."""
+    return active("FAULT_ID_SEQUENCE")
+
+
+def fk_orphan() -> bool:
+    """When on: a contract references an enrollment row lost in a partial restore."""
+    return active("FAULT_FK_ORPHAN")
+
+
+def broker_down() -> bool:
+    """When on: the message broker refuses billing events."""
+    return active("FAULT_BROKER_DOWN")
+
+
+def db_read_only() -> bool:
+    """When on: the database is read-only during a fail-over."""
+    return active("FAULT_DB_READONLY")
+
+
+def clock_skew() -> bool:
+    """When on: this node's clock runs ahead of the auth node."""
+    return active("FAULT_CLOCK_SKEW")

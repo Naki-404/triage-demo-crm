@@ -17,6 +17,7 @@ from ..errors import DomainError
 from ..iin import validate_iin
 from ..models import Client, Contract, User, UserRole
 from .access import ClientAccessError, assert_can_access
+from .infra_faults import check_id_sequence
 
 
 class ExportError(DomainError):
@@ -25,6 +26,18 @@ class ExportError(DomainError):
 
 class PoolExhaustedError(DomainError):
     status_code = 503
+
+
+class ReplicaLagError(DomainError):
+    """The read replica has not caught up with the primary yet (database infrastructure, not the CRM's logic)."""
+
+    status_code = 503
+
+
+class LegacyDataError(DomainError):
+    """A row migrated from the legacy system does not fit the current schema."""
+
+    status_code = 500
 
 
 class RecordError(DomainError):
@@ -62,6 +75,7 @@ def create_client(
     validate_iin(iin)
     if db.query(Client).filter(Client.iin == iin).first():
         raise ValueError("Client with this IIN already exists")
+    check_id_sequence("clients")
     client = Client(name=name, iin=iin, phone=phone, email=email, birth_date=birth_date, owner_id=owner.id)
     if faults.corrupt_record_enabled():
         client.meta_json = "{"
@@ -113,6 +127,11 @@ def search_by_iin(db: Session, iin: str, viewer: User | None = None) -> Client |
 def get_client(db: Session, client_id: int, viewer: User | None = None) -> Client | None:
     _check_pool()
     client = db.get(Client, client_id)
+    if faults.replica_lag():
+        import random
+
+        replica, lag = random.choice(["db-replica-1", "db-replica-2", "pg-ro-0", "pg-ro-1"]), random.randint(5, 240)
+        raise ReplicaLagError(f"read replica {replica} is {lag} s behind primary; client {client_id} is not visible on the replica yet")
     if client is None:
         return None
     if viewer is not None:

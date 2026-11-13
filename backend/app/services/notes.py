@@ -10,6 +10,7 @@ from ..errors import DomainError
 from ..models import Client, ClientNote, User
 from .access import assert_can_access
 from .deps import DependencyError, post_note_remote
+from .infra_faults import check_writable
 
 
 class NotesError(DomainError):
@@ -29,6 +30,7 @@ def create_note(db: Session, client_id: int, user: User, body: str) -> ClientNot
     if client is None:
         raise NotesError("Not found", 404)
     assert_can_access(user, client)
+    check_writable()
     try:
         post_note_remote(client_id, body)
     except DependencyError as err:

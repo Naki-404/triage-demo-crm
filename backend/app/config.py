@@ -60,6 +60,19 @@ class Settings(BaseSettings):
     FAULT_DUPLICATE_ENROLLMENT: bool = False
     FAULT_INSTALLMENT_ROUNDING: bool = False
     FAULT_EXPORT_NO_CONTRACT: bool = False
+    # data-layer faults (stored data or the database / disk itself is the problem)
+    FAULT_REPLICA_LAG: bool = False
+    FAULT_LEGACY_AMOUNT: bool = False
+    FAULT_DISK_FULL: bool = False
+    # infrastructure / stored-data faults (services/infra_faults.py)
+    FAULT_CACHE_DOWN: bool = False
+    FAULT_TAX_DNS: bool = False
+    FAULT_TAX_CERT: bool = False
+    FAULT_ID_SEQUENCE: bool = False
+    FAULT_FK_ORPHAN: bool = False
+    FAULT_BROKER_DOWN: bool = False
+    FAULT_DB_READONLY: bool = False
+    FAULT_CLOCK_SKEW: bool = False
 
     # Vulnerability switches — ignored unless CRM_MODE=vuln
     VULN_SQLI_SEARCH: bool = False

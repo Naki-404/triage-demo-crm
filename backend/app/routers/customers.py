@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
+from .. import faults
 from ..auth import require_roles
 from ..db import get_db
 from ..iin import InvalidIINError
@@ -101,6 +102,8 @@ def export_customers(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="export failed") from exc
     path = customers.safe_export_path(filename, user.id)
     path.parent.mkdir(parents=True, exist_ok=True)
+    if faults.disk_full():
+        raise OSError(28, "No space left on device", str(path))
     path.write_bytes(data)
     return Response(
         content=data,

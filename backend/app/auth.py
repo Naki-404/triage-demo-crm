@@ -56,6 +56,11 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     row = db.query(SessionToken).filter(SessionToken.token_hash == hash_token(raw)).first()
     if row is None or row.expires_at < utcnow():
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    from .services.infra_faults import clock_skew_detail  # late: services import auth helpers
+
+    skew = clock_skew_detail()
+    if skew:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=skew)
     user = db.get(User, row.user_id)
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")

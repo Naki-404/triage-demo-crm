@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from .. import faults
 from ..models import Contract, Installment
 from .commerce_pricing import TWOPLACES, CommerceError
+from .infra_faults import check_broker
 
 
 def list_for_contract(db: Session, contract_id: int) -> list[Installment]:
@@ -24,6 +25,7 @@ def build_installment_schedule(
 ) -> list[Installment]:
     if months not in (3, 6, 12):
         raise CommerceError("Installment term must be 3, 6 or 12 months", 422)
+    check_broker()
     first_due = first_due or (date.today() + timedelta(days=30))
     total = Decimal(contract.total_kzt)
     if faults.installment_rounding_bug():
