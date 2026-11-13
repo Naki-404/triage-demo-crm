@@ -1,5 +1,7 @@
-# Dependabot: weekly, grouped minor/patch bumps so the PR noise stays low.
-# Actions are pinned by commit SHA in the workflows; Dependabot updates the SHA and the "# vX.Y.Z" comment together.
+# Dependabot opens no pull requests: open-pull-requests-limit 0 turns version updates off, and security updates
+# are off in the repository settings. Vulnerability alerts stay on (Security tab), and CI checks every pull request
+# with pip-audit and npm audit. To get update PRs back, raise the limits.
+# Actions are pinned by commit SHA in the workflows; with PRs on, Dependabot updates the SHA and its "# vX.Y.Z" comment.
 version: 2
 updates:
   - package-ecosystem: pip
@@ -7,7 +9,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     groups:
       python-minor-patch:
         update-types: [minor, patch]
@@ -17,7 +19,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
@@ -27,7 +29,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     groups:
       actions:
         patterns: ["*"]
@@ -37,4 +39,4 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
