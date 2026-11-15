@@ -68,9 +68,9 @@ npm run dev -- --host 127.0.0.1 --port 5174
 Из родительской папки `SIP` (лаунчер не входит в этот репозиторий):
 
 ```powershell
-.\start_local.ps1 -NoScenarios          # CSIP + Qazaq CRM с демо-базой
-.\start_local.ps1 -WithEs -NoScenarios  # плюс Elasticsearch: журнал запросов CRM → индекс crm-logs → CSIP
-.\start_local.ps1 -Stop
+.\scripts\start_local.ps1 -NoScenarios          # CSIP + Qazaq CRM с демо-базой
+.\scripts\start_local.ps1 -WithEs -NoScenarios  # плюс Elasticsearch: журнал запросов CRM → индекс crm-logs → CSIP
+.\scripts\start_local.ps1 -Stop
 ```
 
 Лаунчер сам прописывает `SENTRY_DSN` источника CSIP в `.env` CRM.

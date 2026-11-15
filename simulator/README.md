@@ -61,7 +61,7 @@ Each line:
 
 ## E2E checklist (sim → Sentry → CSIP)
 
-1. Start stack with Qazaq CRM and CSIP DSN (`start_local.ps1 -DemoCrm qazaq`).
+1. Start stack with Qazaq CRM and CSIP DSN (`scripts\start_local.ps1 -DemoCrm qazaq`).
 2. Confirm CRM `.env` has `SENTRY_DSN` pointing at CSIP ingest.
 3. `python -m simulator run expected,bug --journal runs/e2e.jsonl --seed 2000001`
 4. In CSIP UI, incidents appear; `X-Request-ID` / `trace.id` matches journal `request_id`.
