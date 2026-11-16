@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from ..auth import require_roles
 from ..db import get_db
 from ..models import User, UserRole
+from ..observe import looks_suspicious, report_suspicious
 from ..schemas import NoteCreate, NoteOut
 from ..services import notes as notes_service
 from ..services.notes import NotesError
@@ -37,10 +38,14 @@ def list_notes(
 @router.post("/api/customers/{client_id}/notes", response_model=NoteOut, status_code=status.HTTP_201_CREATED)
 def create_note(
     client_id: int,
+    request: Request,
     payload: NoteCreate,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ):
+    if looks_suspicious(payload.body):
+        # saved as written (it is the client's note), but reported: whoever reads it later must know it is hostile
+        report_suspicious("note", payload.body, request, client_id=client_id)
     try:
         note = notes_service.create_note(db, client_id, user, payload.body)
     except NotesError as exc:

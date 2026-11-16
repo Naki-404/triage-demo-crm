@@ -20,7 +20,7 @@ from starlette.responses import Response
 
 from .config import settings
 from .models import utcnow
-from .observe import mask_text, request_fields, suspicious_headers, valid_request_id
+from .observe import mask_text, report_suspicious, request_fields, suspicious_headers, valid_request_id
 
 request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
 logger = logging.getLogger("crm.ecs")
@@ -120,6 +120,14 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         token = request_id_var.set(request_id)
         fields_token = request_fields.set({})
         sentry_sdk.set_tag("request_id", request_id)
+        odd_headers = suspicious_headers(request)
+        if odd_headers:
+            report_suspicious(
+                "headers",
+                "; ".join(f"{name}: {request.headers.get(name, '')}" for name in odd_headers),
+                request,
+                **{"http.request.headers.suspicious": odd_headers},
+            )
         started = time.perf_counter()
         status_code = 500
         try:
@@ -147,7 +155,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             }
             if status_code >= 400:
                 event["http.request.body.content"] = await _masked_body(request)
-            odd = suspicious_headers(request)
+            odd = odd_headers
             if odd:
                 event["http.request.headers.suspicious"] = odd
             event.update(request_fields.get() or {})

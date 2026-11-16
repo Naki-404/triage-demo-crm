@@ -46,11 +46,16 @@ def valid_request_id(value: str | None) -> str | None:
 def emit(action: str, level: str, message: str, request: Request | None = None, **extra: Any) -> None:
     """Record an application event: ECS fields for the request line plus a Sentry message for warning/error."""
     fields: dict[str, Any] = {"event.action": action, "event.outcome": "failure" if level in ("warning", "error") else "success"}
+    if level in ("warning", "error"):
+        # a request that answered 2xx but met something worth a warning (hostile input) logs at that level, so log
+        # consumers filtering on warning/error (CSIP) see it
+        fields["log.level"] = level
     if message:
         fields["error.message" if level in ("warning", "error") else "message"] = mask_text(message)
     for key, value in extra.items():
         if value is not None:
-            fields[key] = value
+            # ECS names: log consumers (CSIP polls error.type) read the dotted field
+            fields["error.type" if key == "error_type" else key] = value
     current = request_fields.get()
     if current is not None:
         current.update(fields)
@@ -67,13 +72,27 @@ def emit(action: str, level: str, message: str, request: Request | None = None, 
     logger.log(logging.WARNING if level in ("warning", "error") else logging.INFO, "%s: %s", action, mask_text(message))
 
 
+SUSPICIOUS_MARKERS = ("ignore previous", "ignore all", "system prompt", "<script", "${jndi", "../", "sleep(")
+# how much of a suspicious value goes into the warning (masked): enough for a reader to see what it tried
+SUSPICIOUS_SAMPLE = 300
+
+
+def looks_suspicious(text: str | None) -> bool:
+    """Text that reads like instructions or an injection aimed at whoever (or whatever) reads the logs."""
+    low = (text or "").lower()
+    return any(marker in low for marker in SUSPICIOUS_MARKERS)
+
+
 def suspicious_headers(request: Request) -> list[str]:
     """Header names whose values look like instructions or injections aimed at a log reader."""
-    bad: list[str] = []
-    for name, value in request.headers.items():
-        if name.lower() in ("cookie", "authorization"):
-            continue
-        low = value.lower()
-        if any(marker in low for marker in ("ignore previous", "ignore all", "system prompt", "<script", "${jndi", "../", "sleep(")):
-            bad.append(name)
-    return bad
+    return [
+        name
+        for name, value in request.headers.items()
+        if name.lower() not in ("cookie", "authorization") and looks_suspicious(value)
+    ]
+
+
+def report_suspicious(where: str, text: str, request: Request | None = None, **extra: Any) -> None:
+    """Raise input that looks like instructions to a warning (log line and Sentry), masked and cut short, so the
+    downstream reader (a triage platform, a model) sees it as an attack attempt instead of trusting it."""
+    emit("suspicious_input", "warning", f"{where}: {text[:SUSPICIOUS_SAMPLE]}", request, **extra)

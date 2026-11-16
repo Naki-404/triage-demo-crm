@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from .. import faults
@@ -6,6 +6,7 @@ from ..auth import require_roles
 from ..db import get_db
 from ..iin import InvalidIINError
 from ..models import User, UserRole
+from ..observe import emit
 from ..schemas import ClientCreate, ClientListOut, ClientOut, ClientUpdate
 from ..services import customers
 from ..services.access import ClientAccessError
@@ -17,6 +18,7 @@ router = APIRouter(prefix="/api/customers", tags=["customers"])
 
 @router.post("", response_model=ClientOut, status_code=status.HTTP_201_CREATED)
 def create_customer(
+    request: Request,
     payload: ClientCreate,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
@@ -32,6 +34,9 @@ def create_customer(
             birth_date=payload.birth_date,
         )
     except InvalidIINError as exc:
+        # reported like any domain failure (log line and Sentry warning): a valid IIN rejected by a checksum bug
+        # must reach the triage platform, not vanish as an anonymous 422
+        emit("iin_rejected", "warning", str(exc), request, status_code=422, error_type="InvalidIINError")
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
