@@ -106,9 +106,10 @@ def list_clients(db: Session, *, page: int, page_size: int, q: str | None = None
 def search_by_name(db: Session, name: str, viewer: User | None = None) -> list[Client]:
     _check_pool()
     if vulns.sqli_search() or faults.name_search_uses_raw_sql():
-        sql = text(f"SELECT id FROM clients WHERE name = '{name}'")
+        # Bind the name as a parameter so quotes in the value (e.g. "O'Brien") are not parsed as SQL.
+        sql = text("SELECT id FROM clients WHERE name = :name")
         try:
-            ids = [row[0] for row in db.execute(sql).all()]
+            ids = [row[0] for row in db.execute(sql, {"name": name}).all()]
         except Exception as exc:
             # The database error (and the injected SQL) is for the log; the client sees a generic 500.
             db.rollback()
